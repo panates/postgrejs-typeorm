@@ -95,9 +95,10 @@ re-checked in the TypeORM round wherever its expectations differ - the entries b
 - **Two PostgreJS defects, both silently corrupting data, both reaching `postgrejs-kysely` today.**
   Found in this round and written up in `doc/DRIVER-DESIGN.md` §5. Until they are fixed upstream, do
   not hand PostgreJS a `Date` or a JS array as a parameter:
-  - a `Date` **does not round-trip through a `timestamptz` column** - the encoder writes its local
-    wall-clock components as if they were UTC, so the instant shifts by the local offset. Invisible
-    in a UTC deployment. `utcDates: true` fixes `timestamptz` and breaks `timestamp`.
+  - a `Date` **does not round-trip through a `timestamptz` column** - the instant shifts by the
+    local offset. The encoders are fine; `determine()` declares a `Date` as `timestamp` (1114), and
+    the server reads that zone-less wall clock in the session `TimeZone`. Invisible in a UTC
+    deployment. `utcDates: true` fixes `timestamptz` and breaks `timestamp`.
   - the binary array encoder writes **lower bound 0** (`../postgrejs/src/util/encode-binaryarray.ts:31`),
     so `arr[1]` returns the second element and `array_lower` reports 0.
 - **Cursors read through a portal**, which lives only as long as the transaction that created it.

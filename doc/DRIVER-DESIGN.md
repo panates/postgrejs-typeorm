@@ -267,9 +267,16 @@ const r = await c.query('select v from rt', { objectRows: true })
 r.rows[0].v.toISOString()   // 2024-03-05T09:07:08.900Z  - shifted by the local UTC offset
 ```
 
-The encoder writes the Date's **local wall-clock components** as if they were UTC. `utcDates: true`
-fixes `timestamptz` but then breaks `timestamp`, which `pg` writes as local wall time - so neither
-setting reproduces `pg` for both, measured on one connection:
+**The encoders are not at fault - the declared type is.** `TimestamptzType.encodeBinary` writes the
+absolute instant and is correct; `BindParam(timestamptz, d)` round-trips exactly. The bug is that
+`GlobalTypeMap.determine(new Date())` returns **1114, `timestamp`** - the zone-less type - so the
+server reads that wall clock in the session `TimeZone` on the way into a `timestamptz` column. No
+single declared OID is right for both column kinds, which is why `pg` sends OID 0 with an
+offset-bearing text form and lets the server decide.
+
+`utcDates: true` is not a workaround either: it fixes `timestamptz` and breaks `timestamp`, which
+`pg` writes as local wall time - so neither setting reproduces `pg` for both, measured on one
+connection:
 
 | | `timestamptz` | `timestamp` |
 | --- | --- | --- |
