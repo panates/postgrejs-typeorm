@@ -4,17 +4,17 @@ Reconnaissance, before any `src/` exists. Eleven questions, then an estimate, a 
 that need the user, and a recommendation.
 
 Measured against `typeorm` 1.1.1 (npm `latest`, published 2026-09-20), `pg` 8.23.0,
-`pg-query-stream` 4.17.0, PostgreJS 3.7.0 and PostgreSQL 18.4 on `127.0.0.1:5432`. Line references are into the `typeorm` git tree at tag `1.1.1`,
-path prefix `src/`. Every table below came out of a run against that server; nothing here is read out
-of documentation.
+`pg-query-stream` 4.17.0, PostgreJS 3.7.0 and PostgreSQL 18.4 on `127.0.0.1:5432`. Line references
+are into the `typeorm` git tree at tag `1.1.1`, path prefix `src/`. Every table below came out of a
+run against that server; nothing here is read out of documentation.
 
 **The headline: the `driver` option is the whole seam, and it is smaller than anyone expected.**
 TypeORM's PostgreSQL support touches exactly **three properties** on the `pg` module, **five** on a
 `Pool`, **six** on a connection, **three** on a result and **zero** on an error. That surface has
-been unchanged since TypeORM 0.2.25 (2021). A 180-line spike facade runs TypeORM's schema
-synchroniser, query builder, repositories, transactions, savepoints, streaming and catalog
-introspection, and is **19/20 identical to `pg`** on a differential harness - the one difference
-being cosmetic fields on the error object.
+been unchanged since TypeORM 0.2.39 (November 2021), the release that introduced `options.driver`.
+A 180-line spike facade runs TypeORM's schema synchroniser, query builder, repositories,
+transactions, savepoints, streaming and catalog introspection, and is **19/20 identical to `pg`** on
+a differential harness - the one difference being cosmetic fields on the error object.
 
 Three things to take upstream turned up on the way. Two are defects that silently corrupt data and
 both affect `postgrejs-kysely` today (§5); the third is a missing `notice` relay (§2).
@@ -520,28 +520,34 @@ justifies it - but the argument should not be made on pg-promise or Sequelize.
 
 ## 11. Peer range - and it is remarkable
 
-The 28 lines in `PostgresDriver.ts` and `PostgresQueryRunner.ts` that touch `pg` were extracted at
-each tag and hashed:
+The lines in `PostgresDriver.ts` and `PostgresQueryRunner.ts` that touch `pg` were extracted at each
+tag and hashed, with quotes and trailing semicolons normalised so prettier's 0.3.0 reformat does not
+register as a change:
 
-| tag | seam hash | change |
-| --- | --- | --- |
-| 0.2.25 | `951f8cc484` | 15 lines - `hasOwnProperty` on the result not yet there |
-| 0.2.45 | `ec119a17ad` | 22 lines |
-| 0.3.0 | `889acef444` | 25 lines - prettier reformat; **every `pg` call identical to 0.2.45** |
-| 0.3.20 - 0.3.31 | `8c50c16b93` | + `defaults.parseInt8` (3 lines). Byte-identical across the whole 0.3 line |
-| 1.0.0 - 1.1.1 | `71872c24a3` | `\|\|` → `??` in two places. Nothing else |
+| tag | lines | seam hash | change |
+| --- | ---: | --- | --- |
+| 0.2.38 | 23 | `593d2c4b4c` | **no `options.driver`** - `this.postgres = PlatformTools.load("pg")`, hard-wired. This is the floor |
+| **0.2.39** | 24 | `e7f0c57959` | `options.driver` introduced (2021-11-09). The seam begins here |
+| 0.2.45 | 24 | `333d06833c` | `hosts`-related line wrapping only |
+| 0.3.0 | 25 | `889acef444` | prettier reformat; every `pg` call identical to 0.2.39 |
+| 0.3.20 - 0.3.31 | 28 | `8c50c16b93` | **+ `defaults.parseInt8`** (3 lines) - the one semantic addition. Byte-identical across the whole 0.3 line |
+| 1.0.0 - 1.1.1 | 28 | `71872c24a3` | `\|\|` → `??` in two places. Nothing else |
 
-**Five years and two major versions, and the only semantic change is one optional property.**
+**Four years and two major versions, and the only semantic change is one optional property.**
 `DriverFactory.ts` and `PostgresDataSourceOptions.ts` are byte-identical across 1.0.0, 1.1.0 and
 1.1.1.
+
+Two things do change below 0.2.39 and both rule it out as a target: `options.driver` does not exist,
+and `QueryRunner` calls `databaseConnection.query(sql, params, cb)` in callback form rather than
+awaiting it.
 
 Confirmed by running: the **same unmodified spike facade** drives the smoke test identically on
 `typeorm@0.3.31` and `typeorm@1.1.1` - same types, same affected counts, same transaction and
 savepoint behaviour, in two separate installs.
 
 **The honest peer range is `>=0.3.0 <2`**, tested at both ends, with the seam unchanged back to
-0.2.25 by inspection. Note TypeORM reset its versioning - 1.x follows 0.3.x - so the major bump
-carried no seam change at all.
+0.2.39 by inspection - `>=0.2.39` would be defensible too, but nothing below 0.3.0 was run. Note
+TypeORM reset its versioning - 1.x follows 0.3.x - so the major bump carried no seam change at all.
 
 **And unlike the drizzle round, the target line is alive.** `typeorm@1.1.1` is `latest` and was
 published 2026-09-20, with nightlies through `1.1.1-nightly.20260920`. There is no dead-branch risk
