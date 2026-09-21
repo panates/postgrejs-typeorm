@@ -1,0 +1,52 @@
+name: typeorm suite
+on:
+  # Can be run manually
+  workflow_dispatch:
+
+  # Weekly, to notice a change in TypeORM rather than in this repository
+  schedule:
+    - cron: '0 6 * * 1'
+
+# Only one run at a time
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: typeorm ${{ matrix.typeorm }}, PostgreSQL ${{ matrix.postgres }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ends of the peer range, on two server versions. No
+        # expected-failure count is pinned: the script runs `pg` over the same
+        # files on the same server in the same invocation and compares,
+        # because these tests leave schema behind and score differently
+        # between runs.
+        typeorm: ['0.3.31', '1.1.1']
+        postgres: ['postgres:16', 'postgres:18']
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Environment
+        uses: panates/gh-setup-node@v1
+        with:
+          node-version: '22'
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: Run TypeORM's own suite against this facade
+        run: scripts/run-typeorm-suite.sh
+        env:
+          TYPEORM_VERSION: ${{ matrix.typeorm }}
+          PG_IMAGE: ${{ matrix.postgres }}
+          WORK_DIR: ${{ runner.temp }}/typeorm-suite
+          # A Date written into a timestamptz column round-trips on a UTC
+          # runner whatever the driver does, so the assertions that matter
+          # most would pass vacuously there.
+          TZ: Europe/Istanbul

@@ -64,6 +64,24 @@ options. The full list is `PgjsFacadeOptions` in `src/config.ts`.
 - **601 of 601** against TypeORM's own functional suite across 111 files, with a `pg` control run in
   the same invocation.
 
+## Running the tests
+
+```bash
+npm test                      # unit, live and differential - needs a server on PGHOST
+scripts/run-typeorm-suite.sh  # TypeORM's own functional suite, with a pg control
+```
+
+The suite script clones and compiles TypeORM at a pinned tag, patches the one function that stops an
+`ormconfig.json` carrying a `driver` object, and runs every file twice - once on `pg`, once on this
+facade - on a freshly reset database each time. It fails only on a test this facade loses that `pg`
+wins. There is no pinned expected-failure count on purpose: these tests leave schema behind and read
+it back, so the same file scores differently between runs, and only a control measured in the same
+invocation is worth comparing against.
+
+Set `TZ` to something with a non-zero UTC offset when running either. A `Date` written into a
+`timestamptz` column round-trips on a UTC machine whatever the driver does, so the assertions that
+matter most pass vacuously there.
+
 ## Requirements
 
 - Node.js >= 22

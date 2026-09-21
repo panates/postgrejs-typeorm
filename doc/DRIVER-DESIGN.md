@@ -734,3 +734,39 @@ What I would do next, in this order:
 
 The one thing I would not do is start `src/` first. Not because it is hard - on this evidence it is
 the cheapest part - but because step 2 is what keeps it honest.
+
+---
+
+## What actually happened
+
+Step 1 was done first, as recommended, and all three items were fixed upstream. Every measurement in
+§5 and §6 above was re-taken against that build; two moved, and both are marked in place - a bare
+`Date` now matches `pg` on all three column kinds, which takes the two rejected parameter policies
+from 23/28 to 27/28.
+
+**Steps 2 and 3 were taken in the opposite order**, which is worth recording rather than quietly
+tidying away. `src/` was written against a throwaway copy of the suite runner, and
+`scripts/run-typeorm-suite.sh` was only then promoted into the repository. It did not cost anything
+here - the throwaway ran the same per-file control comparison from the start, and it is what caught
+the missing `pool.on('acquire')` - but the argument for step 2 first still stands, because nothing
+about the throwaway was reviewable and a second person could not have re-run it.
+
+Four things were found after `src/` compiled that reading either library had not turned up:
+
+- **`postgres-interval` has to be pinned to `^1.2.0`**, the major `pg-types@2` resolves. v3 assigns
+  all seven interval fields where v1 assigns only the ones the value carries, so `'1 day'` is
+  `{days: 1}` to a `pg` user and `{years: 0, months: 0, days: 1, ...}` under v3. Caught by the
+  differential harness.
+- **An array OID in `fetchAsString` returns the whole literal as one string**, so it belongs there
+  only where `pg` also returns a string. Caught by the live type matrix.
+- **PostgreJS's pool sizes are top-level**, not under a `pool` key; nesting them is accepted by
+  JavaScript and silently does nothing. Caught by the compiler, having survived the spike.
+- **The facade must not be copied into the suite's `node_modules`**, which is what the sibling
+  drizzle script does. That one has to share a single copy of `drizzle-orm` between the suite and
+  the driver; this one shares nothing with TypeORM, and copying it in put `postgrejs` somewhere its
+  own dependencies could not be resolved from - every test died in a before-hook with
+  `Cannot find package 'flexy-buffer'`. Caught by the script's own equal-count guard, on its first
+  real run, which is the guard earning its place.
+
+None of the first three was reachable by reading either library. They are the case for the
+differential harness, which is the only thing that would have caught them.

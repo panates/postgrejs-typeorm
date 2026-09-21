@@ -3,9 +3,11 @@
 Running [TypeORM](https://typeorm.io) on [PostgreJS](https://github.com/panates/postgrejs)'s
 wire-protocol client instead of `pg`.
 
-**Read `doc/DRIVER-DESIGN.md` before writing any `src/`.** The recon round asked for in
-`.claude/typeorm-driver-recon.md` is done; that report is its answer, and it settles most of what the
-section below left open. What is still open is listed there as D1-D5 and needs you.
+**Read `doc/DRIVER-DESIGN.md` before changing `src/`.** It is why the facade is shaped the way it
+is - which of `pg`'s behaviour is load-bearing, which of PostgreJS's defaults had to be overridden
+and what each override costs - with the measurement behind every claim. Most of what looks arbitrary
+in `src/` is answered there, and D1-D5 at its end record what was chosen and what it would cost to
+choose otherwise.
 
 ## It is not a TypeORM driver - it is a `pg` facade
 
@@ -64,6 +66,56 @@ the only remaining advantage. Do not reopen that without new evidence.
   `CLAUDE.md` are the cheapest way to avoid paying twice for the same discoveries. Read both before
   starting. Copy the reasoning, not the layout - and not the constants: those are dialects, this is a
   facade, and the `fetchAsString` list does not carry over (see below).
+
+## The package
+
+`src/` is ten files, and the split is by decision rather than by layer - each file holds one thing
+that was expensive to arrive at, with the reason next to it.
+
+- `prepare-value.ts` - `pg`'s own parameter rendering, **ported, not imported**. A facade whose
+  purpose is to replace `pg` cannot depend on `pg` at runtime. Held to the original by a test that
+  calls both.
+- `params.ts` - the policy: `prepareValue()` then OID 0, for everything.
+- `constants.ts` - the `fetchAsString` OID list. **An array OID there behaves differently from a
+  scalar one** - it makes the whole literal come back as one string - so it belongs there only where
+  `pg` also returns a string. That is the geometric family except `point[]`.
+- `value-shapes.ts` - the four shapes no wire option can produce. `postgres-interval` is pinned to
+  `^1.2.0`, the major `pg-types@2` resolves; v3 assigns all seven interval fields where v1 assigns
+  only the ones the value carries, and only v1's answer is what a `pg` user sees.
+- `result.ts` - `rows` and `rowCount` are **own properties**, because TypeORM reads them through
+  `hasOwnProperty`. A class with accessors would make every query silently return nothing.
+- `config.ts` - option translation. Two traps: `{ connectionString }` is not a PostgreJS option and
+  is silently ignored, and its pool sizes (`max`/`min`/`idleTimeoutMillis`) are top-level rather
+  than under a `pool` key - nesting them is accepted and does nothing.
+- `client.ts`, `pool.ts` - the `pg` surface itself. `pool.on('acquire')` is emitted because
+  TypeORM's own suite asserts it, though TypeORM itself listens only for `'error'`.
+- `stream.ts` - `pg-query-stream`'s submittable is read for its SQL and thrown away; a PostgreJS
+  `Cursor` does the work.
+- `errors.ts` - the caret diagram and the numeric `position`, the only two divergences that reach a
+  caller.
+
+Tests come in three kinds and the split is the point:
+
+- `test/A-common` - no server. Option translation, the parameter policy, the result reshape, the
+  fixups, error normalisation. `prepare-value.spec.ts` is the one to keep honest: it compares
+  against `pg`'s own function rather than a table someone wrote down.
+- `test/B-live` - against a real server, with **`pg` as the control rather than an expected value**.
+  A 64-type decoding matrix and a 32-case parameter matrix; a change on either side is reported
+  instead of silently agreeing with a stale table.
+- `test/C-differential` - 20 TypeORM programs run through `pg` and through this facade and
+  deep-compared. This is what catches what nobody thought to assert: the `hasOwnProperty` rule, the
+  `postgres-interval` major, and that TypeORM's own `columnsSql` has no `ORDER BY` so
+  `getTable().columns` comes back in a plan-dependent order for *both* drivers.
+
+`scripts/run-typeorm-suite.sh` runs TypeORM's own functional suite against the facade. Read its
+header before changing it; two things there are not obvious:
+
+- It patches exactly one function, `getTypeOrmConfig()`, because `ormconfig.json` cannot carry a
+  `driver` object. The patch fails loudly if that function's shape has changed.
+- It runs **`pg` over the same files, on the same server, in the same invocation**, and per file in
+  its own process with the database reset between. These tests leave schema behind and read it back:
+  `create-table.test.js` scored 1/4 and then 5/0 across two runs with nothing changed. A pinned
+  `EXPECTED_FAILURES` would be a lie; only a delta against the control is news.
 
 ## What PostgreJS gives you
 
