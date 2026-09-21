@@ -4,10 +4,8 @@ A [`pg`](https://node-postgres.com)-compatible facade over
 [PostgreJS](https://github.com/panates/postgrejs), so [TypeORM](https://typeorm.io) runs on
 PostgreJS's wire-protocol client instead of `pg`.
 
-> **Not released yet.** The reconnaissance round is finished and its findings are in
-> [`doc/DRIVER-DESIGN.md`](doc/DRIVER-DESIGN.md); `src/` is not written. Everything below describes
-> what the package is going to be, and the design decisions it still needs are §"Decisions that need
-> you" in that document.
+> **Not released yet.** `src/` is written and tested; the decisions still open are listed at the end
+> of [`doc/DRIVER-DESIGN.md`](doc/DRIVER-DESIGN.md).
 
 ## Why a facade rather than a driver
 
@@ -35,11 +33,36 @@ export const dataSource = new DataSource({
 });
 ```
 
+## What you get, and what you give up
+
+The facade's contract is that a consumer written against `pg` sees what it expects. So `numeric` and
+`int8` come back as strings, `interval` as a `PostgresInterval`, `point` as `{x, y}`, ranges as
+strings - `pg`'s answers, not PostgreJS's richer ones.
+
+Most of PostgreJS's decoding survives that: `json`, `jsonb`, `bytea`, `bool`, the whole date and
+time family and every array of them are already identical between the two. Only a short list has to
+be suppressed, and it is in `src/constants.ts` with the measurement behind it.
+
+If you know the code reading your rows, you can have PostgreJS's values instead:
+
+```ts
+new DataSource({
+  // ...
+  driver: pgjs,
+  extra: { postgrejs: { decoding: 'native' } },
+});
+```
+
+`extra` is TypeORM's passthrough to the pool config, which is where this facade reads its own
+options. The full list is `PgjsFacadeOptions` in `src/config.ts`.
+
 ## Status
 
-A spike of the facade is **19/20 identical to `pg`** on a differential harness and scores
-**601 of 601** against TypeORM's own functional suite across 111 files, with a `pg` control run in
-the same invocation. The measurements, and what they cost, are in `doc/DRIVER-DESIGN.md`.
+- **185 tests** of its own: unit tests, a 64-type decoding matrix and a 32-case parameter matrix
+  against a live server with `pg` as the control, and 20 TypeORM programs run through both drivers
+  and deep-compared.
+- **601 of 601** against TypeORM's own functional suite across 111 files, with a `pg` control run in
+  the same invocation.
 
 ## Requirements
 

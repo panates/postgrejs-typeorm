@@ -34,7 +34,6 @@
     "pg": "^8.23.0",
     "pg-query-stream": "^4.17.0",
     "postgrejs": "^3.7.0",
-    "postgres-interval": "^3.0.0",
     "prettier": "^3.9.4",
     "reflect-metadata": "^0.2.2",
     "rimraf": "^6.1.3",
@@ -99,5 +98,8 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "postgres-interval": "^1.2.0"
   }
 }

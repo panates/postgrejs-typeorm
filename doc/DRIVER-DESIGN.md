@@ -225,35 +225,45 @@ and `circle`, and runs the timestamp family through `DateUtils.mixedDateToDate` 
 the driver for a `timestamptz` column is a JS `Date`, which is exactly the value §5's first defect
 mishandles.
 
-Three policies were measured on 28 query shapes, one live connection each:
+Three policies were measured on 28 query shapes, one live connection each.
+**Re-measured after the two defects below were fixed upstream**, which is
+where the first two columns' scores come from:
 
-| policy | what it does | score |
-| --- | --- | --- |
-| `raw` | hand the value to PostgreJS untouched (`typeMap.determine()` picks an OID) | **23/28** |
-| `bind0` | wrap scalars in `new BindParam(0, v)`, leave `Date`/`Buffer`/array/object to PostgreJS - what `postgrejs-kysely` and `postgrejs-drizzle` do | **23/28** |
-| `pgwire` | do exactly what `pg` does: `prepareValue(v)`, then send the result as OID 0 | **28/28** |
+| policy | what it does | before the fixes | after |
+| --- | --- | --- | --- |
+| `raw` | hand the value to PostgreJS untouched (`typeMap.determine()` picks an OID) | 23/28 | **27/28** |
+| `bind0` | wrap scalars in `new BindParam(0, v)`, leave `Date`/`Buffer`/array/object to PostgreJS - what `postgrejs-kysely` and `postgrejs-drizzle` do | 23/28 | **27/28** |
+| `pgwire` | do exactly what `pg` does: `prepareValue(v)`, then send the result as OID 0 | **28/28** | **28/28** |
 
-The five failures shared by `raw` and `bind0`:
+The five failures that were shared by `raw` and `bind0`, and what became of them:
 
-| case | `pg` | PostgreJS |
-| --- | --- | --- |
-| `Date` into `timestamptz` | `2024-03-05 06:07:08.9+00` | `2024-03-05 09:07:08.9+00` - **the wrong instant** |
-| `[1,2,3]` into `int4[]` | `{1,2,3}` | `[0:2]={1,2,3}` - **lower bound 0** |
-| `['a','b']` into `text[]` | `{a,b}` | `[0:1]={a,b}` |
-| `[]` into `text[]` | `{}` | error `22P02` |
-| `['','b']` into `text[]` | `{"",b}` | `[0:1]={"",b}` |
+| case | `pg` | PostgreJS, before | after |
+| --- | --- | --- | --- |
+| `Date` into `timestamptz` | `2024-03-05 06:07:08.9+00` | `2024-03-05 09:07:08.9+00` - **the wrong instant** | fixed |
+| `[1,2,3]` into `int4[]` | `{1,2,3}` | `[0:2]={1,2,3}` - **lower bound 0** | fixed |
+| `['a','b']` into `text[]` | `{a,b}` | `[0:1]={a,b}` | fixed |
+| `['','b']` into `text[]` | `{"",b}` | `[0:1]={"",b}` | fixed |
+| `[]` into `text[]` | `{}` | error `22P02` | **still fails** |
 
-**Settled, not a decision: the facade uses `pgwire`.** It is not a compromise, it is the principle -
-the facade's job is to *be* the `pg` module, and `pg`'s wire behaviour is to render every value to
-text (or pass a `Buffer`) and let the server resolve the type from context. Reusing `pg`'s own
-`prepareValue` means the facade cannot drift from it. 28/28, no exceptions, and the `Date` matrix
-alone is 9/9 across ordinary, DST-side and pre-epoch instants for `timestamptz`, `timestamp` and
-`date`.
+The one that remains is `determine()` typing an array from `value[0]` alone:
+that is `undefined` for `[]` and `null` for `[null]`, so neither is typed and
+the server answers `22P02 malformed array literal: ""`. A fourth thing to take
+upstream, smaller than the other three.
 
-### The two PostgreJS defects this turned up
+**Settled, not a decision: the facade uses `pgwire`.** After the upstream fixes the score gap is one
+case rather than five, so the argument is no longer really the score - it is that the facade's job is
+to *be* the `pg` module, and `pg`'s wire behaviour is to render every value to text (or pass a
+`Buffer`) and let the server resolve the type from context. Any divergence from that is a bug by
+definition, however reasonable the other value looks. Reusing `pg`'s own `prepareValue` - ported into
+`src/prepare-value.ts` rather than imported, since a facade that replaces `pg` cannot depend on it -
+means the policy cannot drift from `pg` type by type as either library gains encoders.
 
-Both are in PostgreJS itself, both silently corrupt data, and **both affect `postgrejs-kysely`
-today** - its `_params` (`src/postgrejs-connection.ts:229-244`) wraps only scalars and leaves `Date`
+`inferParameterTypes: true` is the escape hatch for anyone who wants PostgreJS's typed binary
+encoders back, now that they are 27/28 rather than 23/28.
+
+### The two PostgreJS defects this turned up - both since fixed
+
+Both were in PostgreJS itself, both silently corrupted data, and **both affected `postgrejs-kysely`** - its `_params` (`src/postgrejs-connection.ts:229-244`) wraps only scalars and leaves `Date`
 and arrays to PostgreJS's encoders, which is precisely the `bind0` column above.
 `postgrejs-drizzle` is shielded by accident: drizzle stringifies arrays and dates in its own column
 encoders before the driver sees them.
@@ -331,10 +341,25 @@ PostgreJS's is not:
 ```
 int8, numeric, time, interval,
 line, lseg, box, path, polygon,
-_interval, _line, _lseg, _box, _path, _polygon,
+_line, _lseg, _box, _path, _polygon, _circle,
 + the range family (int4range, int8range, numrange, daterange, tsrange, tstzrange,
   their multirange counterparts, and the array OIDs of each)
 ```
+
+**An array OID in that list is a different thing from a scalar one**, and getting it wrong is easy:
+it makes the whole array literal come back as **one string**, not as a JS array. So an array type
+belongs there only where `pg` also hands back a string - which, measured, is the geometric family
+**except `point[]`**:
+
+| | `pg` | PostgreJS, native |
+| --- | --- | --- |
+| `line[]`, `lseg[]`, `box[]`, `path[]`, `polygon[]`, `circle[]` | the literal, as a string | an array of typed classes |
+| `interval[]`, `point[]` | a real array of `PostgresInterval` / `{x, y}` | an array of typed classes |
+| `int8[]` | a real array of strings | an array of numbers |
+
+The last three are therefore **not** in the list - they are decoded natively and mapped element by
+element instead. `interval` and `interval[]` ending up on opposite sides of that line is the part
+worth remembering.
 
 `date`, `timestamp`, `timestamptz` and their array forms are **deliberately absent** - PostgreJS
 already matches `pg` exactly on all six, verified. So is `_numeric`: `pg`'s array parser runs
@@ -346,13 +371,18 @@ wire produces `pg`'s shape, so the facade maps it after decoding:
 
 | type | `pg` | PostgreJS | fixup |
 | --- | --- | --- | --- |
-| `point` | `{x,y}` plain object | `Point` instance | copy `x`, `y` |
+| `point`, `point[]` | `{x,y}` plain object | `Point` instance | copy `x`, `y` |
 | `circle` | `{x,y,radius}` | `Circle` instance with **`r`**, not `radius` | rename |
-| `interval` | `PostgresInterval` instance | `Interval` instance - **identical seven fields**, different prototype and `toJSON` | `fetchAsString` + `postgres-interval(str)` gives byte parity including `toISOString()` |
+| `interval` | `PostgresInterval` instance | `Interval` instance - **identical seven fields**, different prototype and `toJSON` | `fetchAsString` + `postgresInterval(str)` |
+| `interval[]` | array of `PostgresInterval` | array of `Interval` | native decode, then `postgresInterval(String(el))` per element |
 | `int8[]` | `["1","2"]` | `[1, 2]` (numbers, BigInt past 2^53) | `.map(String)` - exact, because `String(bigint)` is exact |
 
-`postgres-interval` is already in every `pg` user's tree (a transitive dependency through
-`pg-types`), single file, no dependencies of its own. Taking it as a dependency is decision **D2**.
+**`postgres-interval` has to be pinned to the major `pg` itself resolves, and it is not the current
+one.** `pg@8` depends on `pg-types@2`, which pins `postgres-interval@^1.1.0`; v1 assigns only the
+fields the interval actually carries, while v3 assigns all seven. So `'1 day'` is `{days: 1}` under
+v1 and `{years: 0, months: 0, days: 1, hours: 0, ...}` under v3, and only the first is what a `pg`
+user sees. Caught by the differential harness on its first run against the real `src/`; the
+dependency is `^1.2.0`.
 
 ### What `pg` fidelity costs, in both directions
 
