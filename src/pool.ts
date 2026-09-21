@@ -36,25 +36,39 @@ export class PgPool extends EventEmitter {
   protected readonly _facadeOptions: ResolvedFacadeOptions;
   protected readonly _queryOptions: QueryOptions;
   /**
-   * Connections whose in-flight query already rejected with the error the
-   * pool is about to report, so the duplicate pool event can be suppressed -
-   * see `suppressRedundantPoolError`.
+   * Backend pids currently checked out, which is how a pool error that a
+   * caller already has is told from one nobody has - see
+   * `suppressRedundantPoolError`.
+   *
+   * Keyed by pid because PostgreJS's pool emits `'error'` with **one
+   * argument** and deliberately so: a second would collide with the
+   * `(err, meta)` shape lightning-pool uses for a connection that could not
+   * be created (`connection/pool.js:356-362`). The error names the pid
+   * instead, and a `ConnectionLostError` carries the same `processID` as the
+   * rejection the in-flight query got - verified, both 08006 on the same pid.
+   *
+   * Checked-out is the right test rather than "a query already failed": if
+   * the connection was checked out, whoever holds it is getting the
+   * rejection, so the pool event is the duplicate `pg` would not have raised.
+   * A connection that dies while **idle** in the pool has no such caller, and
+   * that error is reported - which is what a pool error is for.
    */
-  protected readonly _reportedErrors: WeakSet<object>;
+  protected readonly _checkedOutPids: Set<number>;
   protected _ended: boolean;
 
   constructor(config?: PgCompatibleConfig) {
     super();
     this._facadeOptions = resolveFacadeOptions(config);
     this._queryOptions = buildQueryOptions(this._facadeOptions);
-    this._reportedErrors = new WeakSet();
+    this._checkedOutPids = new Set();
     this._ended = false;
     this._pool = new PgjsPool(toPoolConfiguration(config));
-    this._pool.on('error', (err: any, connection?: any) => {
+    this._pool.on('error', (err: any) => {
+      const pid = err?.processID;
       if (
         this._facadeOptions.suppressRedundantPoolError &&
-        connection &&
-        this._reportedErrors.has(connection)
+        typeof pid === 'number' &&
+        this._checkedOutPids.has(pid)
       )
         return;
       this.emit(
@@ -142,16 +156,14 @@ export class PgPool extends EventEmitter {
     // grep of the consumer turns up.
     this.emit('acquire', client);
 
-    // A query that dies with the connection rejects with the same error the
-    // pool is about to raise; remember it so the pool event can be dropped.
-    const onError = () => this._reportedErrors.add(connection as object);
-    client.on('error', onError);
+    const pid = connection.processID;
+    if (typeof pid === 'number') this._checkedOutPids.add(pid);
 
     let released = false;
     const release: ReleaseCallback = () => {
       if (released) return;
       released = true;
-      client.removeListener('error', onError);
+      if (typeof pid === 'number') this._checkedOutPids.delete(pid);
       client._release();
       this.emit('release', undefined, client);
       // `pg` takes a truthy argument here to mean "do not reuse this

@@ -307,10 +307,13 @@ export class PgClient extends EventEmitter {
       // INSERTs and finding the table still empty afterwards. And `execute()`
       // takes no parameters, so this can only apply where `params` is empty,
       // which is the only case that could carry several commands anyway.
-      if (e?.code === '42601' && !hasParams)
-        return this._simple(text, opts).catch(() => {
-          throw o.normalizeErrors ? normalizeError(e) : e;
-        });
+      // When the retry fails too, it is the retry's error that surfaces, not
+      // this one. 42601 is also plain "syntax error", so a multi-statement
+      // string whose second statement names a missing table arrives here as
+      // 42601 and fails on the simple protocol as 42P01 - and 42P01 is what
+      // went wrong, and what `pg` reports. Rethrowing the original would
+      // answer a question nobody asked.
+      if (e?.code === '42601' && !hasParams) return this._simple(text, opts);
       throw o.normalizeErrors ? normalizeError(e) : e;
     }
   }
