@@ -57,6 +57,15 @@ export interface PgjsFacadeOptions {
    * PostgreJS caches prepared statements per connection from the second use
    * of the same SQL. Set `false` for PgBouncer in transaction pooling mode
    * before 1.21, where a named statement does not survive to the next call.
+   *
+   * **Do not combine this with a non-default `DateStyle`.** `prepare: false`
+   * and `unknownTypesAsString` together ask the server for the whole row as
+   * text, and PostgreJS's text timestamp decoder falls back to `new Date(str)`
+   * for anything that is not PostgreSQL's ISO output - which V8 accepts and
+   * reads as `MM.DD.YYYY`. Under `DateStyle='German, DMY'` a stored
+   * 2024-03-05 comes back as 2024-05-03: a valid date, silently not the one
+   * that was stored. The binary path this option turns off is correct.
+   * Reported upstream in `../postgrejs/.claude/text-timestamp-fallback.md`.
    */
   prepare?: boolean;
 
