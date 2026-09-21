@@ -78,9 +78,9 @@ wins. There is no pinned expected-failure count on purpose: these tests leave sc
 it back, so the same file scores differently between runs, and only a control measured in the same
 invocation is worth comparing against.
 
-Set `TZ` to something with a non-zero UTC offset when running either. A `Date` written into a
-`timestamptz` column round-trips on a UTC machine whatever the driver does, so the assertions that
-matter most pass vacuously there.
+The date tests move the server session's `TimeZone` themselves rather than relying on the machine's,
+because a `Date` round-trips unchanged whenever the two zones agree - so a test that does not force
+them apart passes without proving anything.
 
 ## Requirements
 

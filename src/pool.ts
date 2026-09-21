@@ -159,6 +159,15 @@ export class PgPool extends EventEmitter {
       // pool and destroys a dead one itself, so there is nothing to forward.
       this._pool.release(connection).catch(() => undefined);
     };
+
+    // The same function, on the client and as the third callback argument -
+    // which is what `pg-pool` does (`client.release = this._releaseOnce(...)`,
+    // then `callback(undefined, client, client.release)`). Both spellings are
+    // used in the wild: TypeORM keeps the third argument, `await
+    // pool.connect()` leaves a caller with nothing else, and knex calls
+    // `connection.release(shouldDestroy)`. Attaching it is the difference
+    // between those last two working and leaking a connection each time.
+    client.release = release;
     return [client, release];
   }
 }

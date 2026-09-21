@@ -113,18 +113,49 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
     assert.strictEqual(r.rows[0].lo, 1);
   });
 
-  it('round-trips a Date through timestamptz without moving the instant', async function () {
-    // Invisible at UTC, which is why CI pins a non-zero offset.
-    if (new Date().getTimezoneOffset() === 0) return this.skip();
-    const client = await facade.connect()!;
+  it('round-trips a Date through timestamptz without moving the instant', async () => {
+    // This only means anything when the session's TimeZone differs from the
+    // process's - with the two agreeing, the instant comes back unchanged
+    // however the value was encoded, and the test would pass vacuously. So
+    // the session is moved rather than the process, and a zone is picked that
+    // cannot match whatever the runner happens to be set to.
+    const offset = new Date().getTimezoneOffset();
+    const sessionZone = offset === 0 ? 'Asia/Tokyo' : 'UTC';
+
+    // One connection throughout: the table is temp and the zone is a session
+    // setting.
+    const client = (await facade.connect())!;
     try {
+      await client.query(`set time zone '${sessionZone}'`);
       await client.query('create temp table rt(v timestamptz)');
       const d = new Date('2024-03-05T06:07:08.900Z');
       await client.query('insert into rt values($1)', [d]);
       const r = await client.query('select v from rt');
       assert.strictEqual(r.rows[0].v.getTime(), d.getTime());
     } finally {
-      await client.end();
+      client.release!();
     }
+  });
+
+  it('agrees with pg on a Date in a session zone of its own', async () => {
+    // The same thing against the oracle rather than against an invariant, and
+    // over all three column kinds - which is where a single declared OID
+    // cannot be right for both, and why the value goes out untyped.
+    const offset = new Date().getTimezoneOffset();
+    const sessionZone = offset === 0 ? 'Asia/Tokyo' : 'UTC';
+    const d = new Date('2024-03-05T06:07:08.900Z');
+    const sql =
+      'select $1::timestamptz::text a, $2::timestamp::text b, $3::date::text c';
+
+    const read = async (pool: { connect(): Promise<any> }) => {
+      const client = await pool.connect();
+      try {
+        await client.query(`set time zone '${sessionZone}'`);
+        return JSON.stringify((await client.query(sql, [d, d, d])).rows[0]);
+      } finally {
+        client.release();
+      }
+    };
+    assert.strictEqual(await read(facade), await read(control));
   });
 });

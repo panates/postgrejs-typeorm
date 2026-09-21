@@ -25,11 +25,21 @@ describe('toPgResult', () => {
   });
 
   it('counts rows for a SELECT, which PostgreJS leaves undefined', () => {
+    // `fields` is what says the statement returned rows at all - PostgreJS
+    // sends it for every row-returning statement and omits it otherwise.
     const r = toPgResult(
-      { command: 'SELECT', rows: [{}, {}, {}] } as any,
+      { command: 'SELECT', rows: [{}, {}, {}], fields: [] } as any,
       true,
     );
     assert.strictEqual(r.rowCount, 3);
+  });
+
+  it('reports 0 for a SELECT that matched nothing', () => {
+    const r = toPgResult(
+      { command: 'SELECT', rows: [], fields: [] } as any,
+      true,
+    );
+    assert.strictEqual(r.rowCount, 0);
   });
 
   it('reports rowsAffected for a write', () => {
@@ -48,10 +58,14 @@ describe('toPgResult', () => {
     assert.strictEqual(r.rowCount, 0);
   });
 
-  it('gives rows as an empty array when there are none at all', () => {
+  it('reports null, not 0, when the command tag carried no count', () => {
+    // DDL and utility statements. `pg` takes rowCount straight off the tag,
+    // so CREATE/DROP/TRUNCATE/SET/BEGIN/COMMIT are null there - measured
+    // across 11 statement kinds. Reporting 0 would claim the statement
+    // affected nothing, which is a different thing from not saying.
     const r = toPgResult({ command: 'CREATE TABLE' } as any, true);
     assert.deepStrictEqual(r.rows, []);
-    assert.strictEqual(r.rowCount, 0);
+    assert.strictEqual(r.rowCount, null);
   });
 
   it("keeps only the command tag's first word, as pg does", () => {

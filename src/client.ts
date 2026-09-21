@@ -10,10 +10,10 @@ import {
 import { FETCH_AS_STRING_OIDS } from './constants.js';
 import { normalizeError } from './errors.js';
 import { toBindParams } from './params.js';
-import { type PgResult, toPgResult } from './result.js';
+import { type PgResult, toPgResult, toPgResults } from './result.js';
 import { isSubmittable, streamFromSubmittable } from './stream.js';
 
-export type QueryCallback = (err: any, result?: PgResult) => void;
+export type QueryCallback = (err: any, result?: PgResult | PgResult[]) => void;
 
 /** A `pg` query config object, as knex and `pg` itself pass one. */
 export interface PgQueryConfig {
@@ -63,6 +63,13 @@ export function buildQueryOptions(o: ResolvedFacadeOptions): QueryOptions {
  * way, so the two consumers share it.
  */
 export class PgClient extends EventEmitter {
+  /**
+   * Returns this client to the pool it came from. Assigned by `PgPool` when
+   * it hands the client out, exactly as `pg-pool` assigns it - it is the same
+   * function the connect callback receives as its third argument. Absent on a
+   * standalone client, where `end()` is what closes the connection.
+   */
+  declare release?: (err?: any) => void;
   protected readonly _facadeOptions: ResolvedFacadeOptions;
   protected readonly _queryOptions: QueryOptions;
   protected readonly _connection: Connection;
@@ -154,7 +161,9 @@ export class PgClient extends EventEmitter {
           ? callback
           : undefined;
 
-    const promise = this._query(text, params);
+    const rowMode: string | undefined =
+      typeof config === 'object' && config ? config.rowMode : undefined;
+    const promise = this._query(text, params, rowMode);
     if (!cb) return promise;
     promise.then(
       r => cb(null, r),
@@ -165,10 +174,18 @@ export class PgClient extends EventEmitter {
 
   async end(callback?: (err?: any) => void): Promise<void> {
     try {
-      this._detach();
-      if (this._ownsConnection && this._connected) {
-        await this._connection.close();
-        this._connected = false;
+      if (this._ownsConnection) {
+        this._detach();
+        if (this._connected) {
+          await this._connection.close();
+          this._connected = false;
+        }
+      } else if (this.release) {
+        // A pooled client: `release()` is the way back, and ending the
+        // connection under the pool would strand it. Leaking is the worse
+        // of the two divergences from `pg`, which would end the socket here
+        // and let its pool notice afterwards.
+        this.release();
       }
       this.emit('end');
       callback?.();
@@ -209,14 +226,71 @@ export class PgClient extends EventEmitter {
   protected async _query(
     text: string,
     params: any[] | undefined,
-  ): Promise<PgResult> {
+    rowMode?: string,
+  ): Promise<PgResult | PgResult[]> {
     const o = this._facadeOptions;
+    const hasParams = !!params && params.length > 0;
+    const opts = { ...this._queryOptions };
+    // `pg` gives arrays of values for `rowMode: 'array'`, objects otherwise.
+    if (rowMode === 'array') opts.objectRows = false;
+
+    // An empty statement has nothing to Parse, and PostgreJS's extended path
+    // answers the server's EmptyQueryResponse with `Server returned
+    // unexpected response message (I)`. `pg` resolves it as an empty result.
+    if (!hasParams && !text?.trim()) return this._simple(text ?? '', opts);
+
     try {
       const r = await this._connection.query(text, {
-        ...this._queryOptions,
+        ...opts,
         params: toBindParams(params, o),
       });
       return toPgResult(r, o.decoding === 'pg');
+    } catch (e: any) {
+      // `pg` sends a parameterless statement over the SIMPLE protocol, which
+      // allows several commands in one string and answers with one result per
+      // command. PostgreJS's `query()` is always the extended protocol, where
+      // the server refuses that outright.
+      //
+      // Falling back on the SQLSTATE rather than parsing the SQL is safe, and
+      // measured: 42601 here is raised at Parse, before any command runs, so
+      // the retry cannot double a side effect - verified by sending two
+      // INSERTs and finding the table still empty afterwards. And `execute()`
+      // takes no parameters, so this can only apply where `params` is empty,
+      // which is the only case that could carry several commands anyway.
+      if (e?.code === '42601' && !hasParams)
+        return this._simple(text, opts).catch(() => {
+          throw o.normalizeErrors ? normalizeError(e) : e;
+        });
+      throw o.normalizeErrors ? normalizeError(e) : e;
+    }
+  }
+
+  /** The simple protocol, via PostgreJS's `execute()`. */
+  protected async _simple(
+    text: string,
+    opts: QueryOptions,
+  ): Promise<PgResult | PgResult[]> {
+    const o = this._facadeOptions;
+    try {
+      const r = await this._connection.execute(text, opts);
+      const results = r.results ?? [];
+      // An empty statement produces no result at all; `pg` still resolves to
+      // one, with a null command and a null count.
+      if (!results.length)
+        return {
+          // `null`, not `undefined` - that is what pg resolves an empty
+          // statement to, and the two are not the same to a deep compare.
+          command: null,
+          rowCount: null,
+          oid: undefined,
+          rows: [],
+          fields: [],
+        };
+      // One command in, one result out - `pg` unwraps that case and returns
+      // an array only when there really were several.
+      return results.length === 1
+        ? toPgResult(results[0], o.decoding === 'pg')
+        : toPgResults(results, o.decoding === 'pg');
     } catch (e) {
       throw o.normalizeErrors ? normalizeError(e) : e;
     }

@@ -46,7 +46,7 @@ jobs:
           TYPEORM_VERSION: ${{ matrix.typeorm }}
           PG_IMAGE: ${{ matrix.postgres }}
           WORK_DIR: ${{ runner.temp }}/typeorm-suite
-          # A Date written into a timestamptz column round-trips on a UTC
-          # runner whatever the driver does, so the assertions that matter
-          # most would pass vacuously there.
+          # Pinned so the runner's zone cannot silently match the
+          # container's, which is the condition under which date handling
+          # stops being exercised at all.
           TZ: Europe/Istanbul

@@ -81,9 +81,10 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
           PGDATABASE: postgres
-          # The differential suite needs a non-zero UTC offset to be worth
-          # anything: a Date written into a timestamptz column round-trips on
-          # a UTC runner whatever the driver does. See doc/DRIVER-DESIGN.md §5.
+          # The date tests move the SESSION's zone themselves, so they mean
+          # something whatever this is set to. It is pinned anyway so that a
+          # runner whose zone happens to match the container's cannot make a
+          # future test vacuous without anyone noticing.
           TZ: Europe/Istanbul
 
       - name: Send coverage to Coveralls

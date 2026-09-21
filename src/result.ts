@@ -14,8 +14,10 @@ export interface PgField {
 
 /** What `pg` resolves a query to. */
 export interface PgResult<R = any> {
-  command?: string;
-  rowCount: number;
+  /** `null` for an empty statement, which is what `pg` resolves one to. */
+  command?: string | null;
+  /** `null` for a statement whose command tag carries no count - see below. */
+  rowCount: number | null;
   oid?: number;
   rows: R[];
   fields: PgField[];
@@ -58,9 +60,8 @@ function toPgFields(fields: readonly FieldInfo[]): PgField[] {
  *   a class with accessors on its prototype would make every query return
  *   nothing, silently. That is why this builds a plain object literal rather
  *   than an instance of anything.
- * - **`rowCount` falls back to `rows.length`.** PostgreJS sets `rowsAffected`
- *   only for INSERT/UPDATE/DELETE/MERGE and leaves it undefined for SELECT,
- *   where `pg` reports the number of rows returned.
+ * - **`rowCount` is `null` for a statement whose command tag carries no
+ *   count**, not 0 - see the comment on it below.
  */
 export function toPgResult<R = any>(
   r: QueryResult,
@@ -100,10 +101,37 @@ export function toPgResult<R = any>(
 
   return {
     command: r.command ? r.command.split(' ')[0] : undefined,
-    rowCount: r.rowsAffected !== undefined ? r.rowsAffected : rows.length,
+    // `pg` takes this from the command tag: a count when the tag carries one,
+    // and **null** when it does not. So DDL and utility statements - CREATE,
+    // DROP, TRUNCATE, SET, BEGIN, COMMIT - are `null`, not 0. Measured across
+    // 11 statement kinds. PostgreJS says the same thing differently: it sets
+    // `rowsAffected` for the write commands and sends `fields` only for a
+    // statement that returns rows, so the absence of both is the tag having
+    // carried no count.
+    rowCount:
+      r.rowsAffected !== undefined
+        ? r.rowsAffected
+        : r.fields !== undefined
+          ? rows.length
+          : null,
     oid: undefined,
     rows,
     fields: toPgFields(fields),
     commandTag: r.command,
   };
+}
+
+/**
+ * A multi-statement result, which `pg` returns as a **bare array** of results
+ * rather than as one object - see `PgClient` for why this path exists at all.
+ */
+export function toPgResults(
+  results: readonly QueryResult[],
+  applyFixups: boolean,
+): PgResult[] {
+  const l = results.length;
+  const out = new Array<PgResult>(l);
+  let i: number;
+  for (i = 0; i < l; i++) out[i] = toPgResult(results[i], applyFixups);
+  return out;
 }

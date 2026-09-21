@@ -294,7 +294,11 @@ connection:
 | PostgreJS default | **`09:07:08.9+00`** | `09:07:08.9` |
 | PostgreJS `utcDates: true` | `06:07:08.9+00` | **`06:07:08.9`** |
 
-Invisible in a UTC environment, which is presumably why it has survived. Measured here at UTC+03.
+Invisible whenever the session's `TimeZone` and the Node process's zone **agree** - not merely at
+UTC, which is how the first write-up of this put it. That is what let it survive, and it is also why
+declaring `timestamptz` instead would not have helped: with the zones agreeing it changes nothing,
+and with them differing it moves the damage from `timestamptz` to `timestamp`. Measured here with
+the server at UTC and the process at UTC+03.
 
 **(b) The binary array encoder writes lower bound 0.**
 `../postgrejs/src/util/encode-binaryarray.ts:31` is `io.writeInt32BE(0); // LBound always 0.`
@@ -770,3 +774,37 @@ Four things were found after `src/` compiled that reading either library had not
 
 None of the first three was reachable by reading either library. They are the case for the
 differential harness, which is the only thing that would have caught them.
+
+### And four more, found by probing `pg` rather than by running TypeORM
+
+The 806-test suite run was green before any of these were noticed, which is the useful part: TypeORM
+issues its DDL one statement at a time and reads `rowCount` only for writes, so none of them is on a
+path it takes. They were found by asking `pg` what it does with statement shapes the facade had not
+been shown, and comparing.
+
+| | `pg` | the facade, before |
+| --- | --- | --- |
+| `select 1; select 2` | a **bare array** of two results | `42601 cannot insert multiple commands into a prepared statement` |
+| `query('')` | `{command: null, rowCount: null, rows: [], fields: []}` | `Server returned unexpected response message (I)` |
+| `create table …` | `rowCount: **null**` | `rowCount: 0` |
+| `{text, rowMode: 'array'}` | `[[1, 2]]` | `[{a: 1, b: 2}]` |
+
+`rowCount` is the subtle one. `pg` takes it straight off the command tag, so a tag carrying no count
+- CREATE, DROP, TRUNCATE, SET, BEGIN, COMMIT - gives `null`, not 0. Measured across 11 statement
+kinds. "Affected nothing" and "did not say" are different answers and a caller can tell.
+
+**Multi-statement needs the simple protocol**, which is a property of the two libraries rather than a
+defect: `pg` sends any parameterless statement over the simple protocol, where several commands are
+allowed and each answers with its own result; PostgreJS's `query()` is always the extended protocol,
+where the server refuses. `execute()` is the simple protocol here, so the facade retries on `42601`
+when there are no parameters.
+
+That retry is only safe because **`42601` is raised at Parse, before any command in the string
+runs** - otherwise it would double every write in a multi-statement INSERT. Verified rather than
+reasoned: two INSERTs, the call fails, the table is still empty; after the retry it has two rows, not
+four. `test/B-live/statement-kinds.spec.ts` pins it.
+
+Two of the four are PostgreJS's rather than the facade's, and are filed upstream in
+`../postgrejs/.claude/query-edge-cases.md`: the empty statement, and `determine()` typing an array
+from `value[0]` alone - so `['a', null]` can be sent and `[null, 'a']` cannot, which makes it depend
+on element order.
