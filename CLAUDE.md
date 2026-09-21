@@ -54,8 +54,20 @@ the only remaining advantage. Do not reopen that without new evidence.
 
 ## Where things are
 
-- **PostgreJS**: `../postgrejs`. Its `CLAUDE.md` describes the internals. Peer is `^3.7.0`, which is
-  published and contains everything below.
+- **PostgreJS**: `../postgrejs`. Its `CLAUDE.md` describes the internals. Peer is `>=3.7.0 <4`.
+  **Which release a fix is in decides what `src/` has to keep carrying**, and the two are easy to
+  confuse because the working copy at `../postgrejs` runs ahead of npm:
+
+  | in published **3.8.0** | still unreleased |
+  | --- | --- |
+  | binary array lower bound (`1ace8fe`) | `query('')` answers instead of raising (`3a60510`) |
+  | a `Date` parameter goes out unspecified (`1c3891a`) | an array is typed from its first non-null value (`49c045d`) |
+  | a string parameter goes out unspecified (`cd52507`) | `err.serverMessage` (`e413ae9`) |
+  | server notices reach the connection (`8ecf16e`) | pooled-connection pipelining, opt-in (`4e9a609`, `be0ef23`) |
+
+  So the empty-statement fallback and the caret-stripping fallback in `src/errors.ts` are **not**
+  dead code on 3.8.0 - they are what a user installing from npm today still needs. Check a fix's
+  release before deleting the thing that works around it: `git tag --contains <sha>`.
 - **TypeORM**: peer is **`>=0.3.0 <2`**. The lines that touch `pg` are unchanged from **0.2.39** -
   where `options.driver` was introduced, 2021-11-09 - to 1.1.1, apart from `defaults.parseInt8` added
   in the 0.3 line and `||` becoming `??` at 1.0.0. The same facade was run against 0.3.31 and 1.1.1

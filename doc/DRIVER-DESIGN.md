@@ -808,3 +808,48 @@ Two of the four are PostgreJS's rather than the facade's, and are filed upstream
 `../postgrejs/.claude/query-edge-cases.md`: the empty statement, and `determine()` typing an array
 from `value[0]` alone - so `['a', null]` can be sent and `[null, 'a']` cannot, which makes it depend
 on element order.
+
+### Re-measured against PostgreJS 3.8 (2026-09-21)
+
+Both of those, and the three defects from §5, are fixed upstream. **Which release they are in decides
+what `src/` keeps carrying**, and the answer is not "all of them": the working copy runs ahead of
+npm.
+
+| in published **3.8.0** | still unreleased |
+| --- | --- |
+| binary array lower bound | `query('')` answers instead of raising |
+| a `Date` parameter goes out unspecified | an array is typed from its first non-null value |
+| a string parameter goes out unspecified | `err.serverMessage` |
+| server notices reach the connection | pooled-connection pipelining, opt-in |
+
+So the empty-statement fallback and the caret-stripping fallback in `src/errors.ts` are not dead code
+on 3.8.0 - they are what someone installing from npm today still needs. `git tag --contains <sha>`
+before deleting a workaround.
+
+**`err.serverMessage` replaces a regex.** 3.8 keeps PostgreSQL's own undecorated text on the error,
+which is exactly what `pg` puts in `message`, so `normalizeError` copies a field where it used to
+take the decorated text apart. The regex stays as the 3.7 path. The field was added upstream for the
+same reason it is wanted here: parsing the decorated message is what callers do, and the decoration
+breaks anchored patterns.
+
+**One new divergence, and it is the largest behavioural one found so far.** `pg`'s `Client` queues
+concurrent `query()` calls and runs them one at a time; a PostgreJS `Connection` pipelines. The
+difference surfaces as a failure rather than a reordering:
+
+```js
+await Promise.all([
+  client.query('create temp table t(i int)'),
+  client.query('insert into t values (1)'),   // 42P01 on a raw connection
+]);
+```
+
+Measured against `pg`: `1` there, `42P01` here. Result-to-query correlation and error isolation were
+already identical; it is only statements that depend on what a previous one left behind.
+
+**The facade now serialises per client**, which is what `pg` does. Pipelining is worth **10x** on one
+connection - 500 queries in 12ms against 120ms awaited, and `pg` itself takes 142ms awaited - so this
+is giving up something real. It is still right: `pg` has never offered that path, deprecates
+concurrent `query()` outright ("will be removed in pg@9.0"), and so no consumer written against `pg`
+can be relying on it. Anyone who wants PostgreJS's concurrency has `client.connection`, which is the
+real `Connection` and is not queued. Streams are deliberately left out of the queue - a cursor is
+read lazily, and holding the queue for its lifetime would deadlock everything behind it.

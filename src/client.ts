@@ -75,6 +75,10 @@ export class PgClient extends EventEmitter {
   protected readonly _connection: Connection;
   protected readonly _ownsConnection: boolean;
   protected _connected: boolean;
+  /**
+   * The tail of the per-client statement queue - see `_serialize`.
+   */
+  protected _tail: Promise<unknown>;
   protected _onConnectionError?: (err: any) => void;
   protected _onNotice?: (msg: any) => void;
   protected _onNotification?: (msg: any) => void;
@@ -109,6 +113,7 @@ export class PgClient extends EventEmitter {
       this._queryOptions = borrowed.queryOptions;
       this._ownsConnection = false;
       this._connected = true;
+      this._tail = Promise.resolve();
       this._attach();
     } else {
       this._facadeOptions = resolveFacadeOptions(config);
@@ -116,6 +121,7 @@ export class PgClient extends EventEmitter {
       this._connection = new Connection(toPoolConfiguration(config));
       this._ownsConnection = true;
       this._connected = false;
+      this._tail = Promise.resolve();
     }
   }
 
@@ -223,7 +229,51 @@ export class PgClient extends EventEmitter {
     this._onNotification = undefined;
   }
 
-  protected async _query(
+  /**
+   * Runs statements on this client one at a time, which is what `pg` does.
+   *
+   * `pg`'s `Client` pushes every `query()` onto an internal queue and starts
+   * the next only when the previous has settled. A PostgreJS `Connection`
+   * pipelines instead - concurrent calls all go out and overlap - and that is
+   * a real feature: 500 queries on one connection take 12ms pipelined against
+   * 120ms awaited, measured. It is also a behaviour difference a caller can
+   * see, and the way they see it is a failure:
+   *
+   * ```js
+   * await Promise.all([
+   *   client.query('create temp table t(i int)'),
+   *   client.query('insert into t values (1)'),   // 42P01 on the raw connection
+   * ]);
+   * ```
+   *
+   * Nobody migrating from `pg` loses the 10x by serialising, because `pg`
+   * never offered it - it serialises, and deprecates concurrent `query()`
+   * outright ("will be removed in pg@9.0"). Anyone who wants PostgreJS's
+   * concurrency has `client.connection`, which is the real thing and is not
+   * queued.
+   *
+   * Streams are deliberately not queued: a cursor is read lazily and holding
+   * the queue open for its lifetime would deadlock every statement behind it.
+   */
+  protected _serialize<T>(run: () => Promise<T>): Promise<T> {
+    const result = this._tail.then(run, run);
+    // The chain has to survive a rejection, and must not retain the value.
+    this._tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  protected _query(
+    text: string,
+    params: any[] | undefined,
+    rowMode?: string,
+  ): Promise<PgResult | PgResult[]> {
+    return this._serialize(() => this._runQuery(text, params, rowMode));
+  }
+
+  protected async _runQuery(
     text: string,
     params: any[] | undefined,
     rowMode?: string,

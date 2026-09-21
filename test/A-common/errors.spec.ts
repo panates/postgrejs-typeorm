@@ -2,7 +2,21 @@ import assert from 'node:assert';
 import { normalizeError } from '../../src/errors.js';
 
 describe('normalizeError', () => {
-  it('strips the caret diagram PostgreJS appends', () => {
+  it("prefers the server's own text when PostgreJS 3.8 supplies it", () => {
+    // 3.8 added `serverMessage` because parsing the decorated `message` is
+    // what callers were doing and it breaks anchored patterns. Copying the
+    // field beats reproducing it.
+    const err: any = Object.assign(
+      new Error(
+        'column "x" does not exist\n    at line 1 column 8\n  1| select x\n    .------^',
+      ),
+      { serverMessage: 'column "x" does not exist' },
+    );
+    normalizeError(err);
+    assert.strictEqual(err.message, 'column "x" does not exist');
+  });
+
+  it('falls back to stripping the diagram on 3.7, which has no serverMessage', () => {
     const err: any = new Error(
       'relation "nope" does not exist\n' +
         '    at line 1 column 15\n' +

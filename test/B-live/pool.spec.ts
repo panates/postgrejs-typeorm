@@ -81,6 +81,76 @@ describe('B-live: the pool behaves the way pg-pool does', () => {
     }
   });
 
+  it('runs concurrent queries on one client one at a time, as pg does', async () => {
+    // pg's Client queues them; a PostgreJS Connection pipelines, and the
+    // difference is visible as a failure rather than as a reordering - the
+    // insert reaches the server before the CREATE has taken effect and
+    // raises 42P01. pg deprecates concurrent query() outright, so nobody
+    // migrating loses the pipelining by having it serialised here; anyone
+    // who wants it has `client.connection`, which is not queued.
+    const pool = facadePool({ max: 1 });
+    try {
+      const client = (await pool.connect()) as PgClient;
+      try {
+        const results = await Promise.all([
+          client.query('create temp table cc_order(i int)'),
+          client.query('insert into cc_order values (1)'),
+          client.query('select count(*)::int as n from cc_order'),
+        ]);
+        assert.strictEqual((results[2] as any).rows[0].n, 1);
+      } finally {
+        client.release!();
+      }
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('keeps each concurrent result matched to its own query', async () => {
+    const pool = facadePool({ max: 1 });
+    try {
+      const client = (await pool.connect()) as PgClient;
+      try {
+        const rs = await Promise.all(
+          [1, 2, 3, 4, 5].map(n => client.query('select $1::int as n', [n])),
+        );
+        assert.deepStrictEqual(
+          rs.map((r: any) => r.rows[0].n),
+          [1, 2, 3, 4, 5],
+        );
+      } finally {
+        client.release!();
+      }
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('keeps serving after one statement in a concurrent burst fails', async () => {
+    const pool = facadePool({ max: 1 });
+    try {
+      const client = (await pool.connect()) as PgClient;
+      try {
+        const rs = await Promise.allSettled([
+          client.query('select 1 as a'),
+          client.query('select * from no_such_table_at_all'),
+          client.query('select 3 as c'),
+        ]);
+        assert.deepStrictEqual(
+          rs.map(r =>
+            r.status === 'fulfilled' ? 'ok' : ((r.reason as any).code ?? 'err'),
+          ),
+          ['ok', '42P01', 'ok'],
+          'a rejection must not break the queue behind it',
+        );
+      } finally {
+        client.release!();
+      }
+    } finally {
+      await pool.end();
+    }
+  });
+
   it('reports the sizes pg reports', async () => {
     const pool = facadePool({ max: 3 });
     try {
