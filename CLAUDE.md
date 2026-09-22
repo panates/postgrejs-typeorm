@@ -64,13 +64,26 @@ the only remaining advantage. Do not reopen that without new evidence.
   | a `Date` parameter goes out unspecified (`1c3891a`) | an array is typed from its first non-null value (`49c045d`) |
   | a string parameter goes out unspecified (`cd52507`) | `err.serverMessage` (`e413ae9`) |
   | server notices reach the connection (`8ecf16e`) | pooled-connection pipelining, opt-in (`4e9a609`, `be0ef23`) |
-  | | a text date is read in the server's own `DateStyle` (`4c1154b`) |
-  | | `money` is decoded rather than left a `Buffer` (`285097e`, `3ed2812`) |
+  | a text date is read in the server's own `DateStyle` (`4c1154b`) | `fetchAsString` names an array by its element type (`313c71e`) |
+  | `money` is decoded rather than left a `Buffer` (`285097e`, `3ed2812`) | `toPostgres()` on the value classes (`3d84fb5`) |
 
-  The last two are the reason to re-run the type matrix after every upstream bump rather than only
-  the TypeORM suite. **`money` is the worked example**: a new decoder upstream is a new *divergence*
-  here, because the facade's job is to answer what `pg` answers - and `pg` has no parser for
-  `money` at all. The suite is silent about it; the matrix failed on the first run.
+  **Build against the copy in `node_modules`, not against a release.** The table above is for
+  reading history, not for deciding what `src/` carries: PostgreJS is maintained in the next
+  directory and released before this package ships, so an unreleased fix is a scheduling detail.
+  Do not add a branch, a fallback or a feature test for a published version, and do not run
+  `git tag --contains` to justify keeping one.
+
+  **The facade carries no post-decode fixups and nothing of `pg`'s.** No table that rewrites values
+  after decoding, no `postgres-interval`, no `postgres-array`. When a divergence from `pg` turns
+  up, it is measured against the `node_modules` build and then **fixed in PostgreJS** - written up
+  in `../postgrejs/.claude/` - rather than patched around here. The knowledge of what `pg` answers
+  belongs in the client that decodes, once, not reconstructed afterwards by every adapter.
+  `.claude/pg-compatible-decoding.md` is the open one and it is what removes `value-shapes.ts`.
+
+  Re-run the type matrix after every upstream bump, not only the TypeORM suite. **`money` is the
+  worked example**: a new decoder upstream is a new *divergence* here, because the facade's job is
+  to answer what `pg` answers - and `pg` has no parser for `money` at all. The suite is silent
+  about it; the matrix failed on the first run.
 
   So the empty-statement fallback and the caret-stripping fallback in `src/errors.ts` are **not**
   dead code on 3.8.0 - they are what a user installing from npm today still needs. Check a fix's
@@ -98,7 +111,7 @@ that was expensive to arrive at, with the reason next to it.
 - `constants.ts` - the `fetchAsString` OID list. **An array OID there behaves differently from a
   scalar one** - it makes the whole literal come back as one string - so it belongs there only where
   `pg` also returns a string. That is the geometric family except `point[]`.
-- `value-shapes.ts` - the four shapes no wire option can produce. `postgres-interval` is pinned to
+- `value-shapes.ts` - the shapes no wire option can produce. `postgres-interval` is pinned to
   `^1.2.0`, the major `pg-types@2` resolves; v3 assigns all seven interval fields where v1 assigns
   only the ones the value carries, and only v1's answer is what a `pg` user sees.
 - `result.ts` - `rows` and `rowCount` are **own properties**, because TypeORM reads them through

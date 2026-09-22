@@ -34,8 +34,11 @@ const RANGE_OIDS: number[] = [
  *   identical `Date`; asking for text would create a divergence rather than
  *   remove one. This is where `postgrejs-drizzle`'s list differs and must
  *   not be copied - its driver overrides pg's parsers to get raw strings.
- * - `_numeric` is not here either: `pg`'s array parser runs `parseFloat` per
- *   element even though scalar `numeric` stays a string, and PostgreJS agrees.
+ * - `_numeric` is the awkward one. `pg`'s array parser runs `parseFloat` per
+ *   element even though scalar `numeric` stays a string - an inconsistency of
+ *   `pg`'s, not a principle. Naming `numeric` here now reaches `numeric[]`
+ *   too, which is the more defensible behaviour and the wrong one for a
+ *   facade, so the elements are turned back into numbers afterwards.
  */
 export const FETCH_AS_STRING_OIDS: number[] = [
   DataTypeOIDs.int8,
@@ -63,17 +66,17 @@ export const FETCH_AS_STRING_OIDS: number[] = [
   DataTypeOIDs._path,
   DataTypeOIDs._polygon,
   DataTypeOIDs._circle,
-  // `money[]` is here for a different reason than the geometric arrays: `pg`
-  // *does* give a real array for it (`register(791, parseStringArray)`), but
-  // its elements are the server's text, which cannot be rebuilt from the
-  // numbers PostgreJS decodes. So the literal is fetched and split with the
-  // same library `pg` splits it with - see value-shapes.ts.
-  DataTypeOIDs._money,
   // Deliberately NOT here, though their scalar forms are: `pg` parses these
   // into real arrays, so asking for the literal would be a worse answer than
-  // PostgreJS's own decoding. They are mapped element by element instead -
-  // see value-shapes.ts.
-  //   _interval, _point, _int8
+  // PostgreJS's own decoding.
+  //   _money, _int8, _numeric, _interval, _point
+  //
+  // The first three need nothing at all now. Since upstream `313c71e`,
+  // naming a **scalar** OID also asks for that type's array columns as an
+  // array of the server's strings - which is exactly `pg`'s answer for
+  // `money[]` and `int8[]`, and is why neither needs a fixup any more. The
+  // array OIDs above still mean "the whole literal, verbatim", so the two
+  // asks stay distinguishable by which OID is named.
   ...RANGE_OIDS,
 ].filter(oid => typeof oid === 'number');
 

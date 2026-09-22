@@ -6,7 +6,7 @@
   "license": "BSD-3-Clause",
   "private": true,
   "peerDependencies": {
-    "postgrejs": ">=3.7.0 <4",
+    "postgrejs": ">=3.9.0",
     "typeorm": ">=0.3.0 <2"
   },
   "peerDependenciesMeta": {
@@ -100,7 +100,6 @@
     "access": "public"
   },
   "dependencies": {
-    "postgres-array": "^2.0.0",
     "postgres-interval": "^1.2.0"
   }
 }

@@ -1,5 +1,4 @@
 import { DataTypeOIDs } from 'postgrejs';
-import postgresArray from 'postgres-array';
 import postgresInterval from 'postgres-interval';
 
 /**
@@ -9,10 +8,10 @@ import postgresInterval from 'postgres-interval';
  * class instance, but for these `pg` gives a plain object or an array of
  * strings - a third shape that is neither end of the wire. So they are mapped
  * after decoding. Measured, this is what takes the type matrix from 58/64 to
- * 64/64 (`doc/DRIVER-DESIGN.md` §6). `money[]` joined them when PostgreJS
- * gained a `money` decoder; it is the one whose text form is fetched *and*
- * mapped, because `pg` gives neither the literal nor a decoded number but an
- * array of the server's strings.
+ * 64/64 (`doc/DRIVER-DESIGN.md` §6). The list shrank again when upstream
+ * `313c71e` let `fetchAsString` name an array column by its element type:
+ * `money[]` and `int8[]` then came back as `pg`'s own strings with nothing
+ * left to map, and `numeric[]` took their place for the opposite reason.
  *
  * `postgres-interval` is a dependency for exactly one of them, and it is the
  * one that cannot be approximated: `pg` returns a `PostgresInterval`
@@ -49,26 +48,20 @@ const FIXUPS = new Map<number, Fixup>(
         (v: any[]) => v.map(p => (p == null ? p : { x: p.x, y: p.y })),
       ],
       [DataTypeOIDs.circle, (v: any) => ({ x: v.x, y: v.y, radius: v.r })],
-      // `pg` leaves int8 array elements as strings. PostgreJS decodes them
-      // into numbers, and into BigInt past 2^53 - and String(bigint) is
-      // exact, so this loses nothing.
+      // `numeric[]` is the one place asking for text overshoots. Scalar
+      // `numeric` has to be a string, and naming it now asks for `numeric[]`
+      // as strings too - but `pg` runs `parseFloat` per element there, so a
+      // string array would be a divergence. This is that `parseFloat`, and
+      // nothing more: `pg-types` does `arrayParser.create(value, parseFloat)`
+      // for OID 1231. Yes, it means `numeric` keeps its precision and
+      // `numeric[]` does not; that is `pg`'s behaviour and the facade's job
+      // is to match it, not to improve on it.
       [
-        DataTypeOIDs._int8,
-        (v: any[]) => v.map(n => (n == null ? n : String(n))),
-      ],
-      // `money[]` arrives as the server's own literal (see constants.ts) and
-      // is split here. `postgres-array` is the second dependency, and for the
-      // same reason as the first: it is the exact library `pg` uses for this
-      // type - `pg-types` does `register(791, parseStringArray)`, and that
-      // function is `arrayParser.create(value).parse()`. Given the same
-      // literal it cannot disagree. Writing a splitter here would be an
-      // approximation of something that has to be exact, and the literal is
-      // where it is hardest to hand-roll: `{"$99,999,999,999,999.99",-$5.00}`
-      // quotes only the element whose grouping separators would otherwise
-      // read as delimiters.
-      [
-        DataTypeOIDs._money,
-        (v: any) => (typeof v === 'string' ? postgresArray.parse(v) : v),
+        DataTypeOIDs._numeric,
+        (v: any[]) =>
+          Array.isArray(v)
+            ? v.map(n => (n == null ? n : parseFloat(n as any)))
+            : v,
       ],
     ] as [number, Fixup][]
   ).filter(([oid]) => typeof oid === 'number'),

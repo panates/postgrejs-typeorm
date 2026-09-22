@@ -125,8 +125,9 @@ Nothing hidden, so here is the whole list.
   different implementation with a different bug surface. Everything below about differential
   testing exists because of that, not in spite of it - and most of what it has caught so far was in
   the facade rather than in PostgreJS.
-- **Two small dependencies**, `postgres-interval` and `postgres-array` - the exact ones `pg` uses
-  through `pg-types`, for the two shapes that have to be identical rather than approximate.
+- **One small dependency**, `postgres-interval` - the exact one `pg` uses through `pg-types`, for
+  the one value whose shape has to be identical rather than approximate. It goes once PostgreJS
+  can produce that shape itself, which is where the work belongs.
 - **`pg-query-stream`**, but only if you call `QueryRunner.stream()`. TypeORM loads it itself.
 - **Not a universal `pg` replacement.** The 18 members TypeORM uses are covered and so is knex's
   entry point; Sequelize wants a parser-function registry PostgreJS has no equivalent of, and

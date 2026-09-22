@@ -26,7 +26,9 @@ export interface PgQueryConfig {
 /**
  * The per-query options every statement goes out with.
  *
- * - `objectRows` because `pg` hands back objects.
+ * - `rowDecoder: 'object'` because `pg` hands back objects. Not the
+ *   deprecated `objectRows` boolean: PostgreJS resolves the two with
+ *   `rowDecoder` winning, so setting `objectRows` next to it does nothing.
  * - `rollbackOnError: false` because PostgreJS otherwise wraps every
  *   statement inside a transaction in a savepoint of its own, so a failed
  *   statement leaves the transaction usable. That is neither PostgreSQL's
@@ -40,7 +42,7 @@ export interface PgQueryConfig {
  */
 export function buildQueryOptions(o: ResolvedFacadeOptions): QueryOptions {
   const opts: QueryOptions = {
-    objectRows: true,
+    rowDecoder: 'object',
     rollbackOnError: false,
     fetchCount: 0,
   };
@@ -282,7 +284,11 @@ export class PgClient extends EventEmitter {
     const hasParams = !!params && params.length > 0;
     const opts = { ...this._queryOptions };
     // `pg` gives arrays of values for `rowMode: 'array'`, objects otherwise.
-    if (rowMode === 'array') opts.objectRows = false;
+    // Through `rowDecoder`, not the deprecated `objectRows`: the two are
+    // resolved with `rowDecoder` winning, and this object already carries
+    // `rowDecoder: 'object'` - so assigning `objectRows` here is silently
+    // ignored. It was, until a live test caught it.
+    if (rowMode === 'array') opts.rowDecoder = 'array';
 
     // An empty statement has nothing to Parse, and PostgreJS's extended path
     // answers the server's EmptyQueryResponse with `Server returned

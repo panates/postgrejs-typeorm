@@ -79,33 +79,32 @@ describe('edge branches', () => {
       assert.deepStrictEqual({ ...out[1] }, { x: 1, y: 2 });
     });
 
-    it('keeps a null inside an int8 array', () => {
-      assert.deepStrictEqual(apply(DataTypeOIDs._int8, [null, 2n]), [
+    it('keeps a null inside a numeric array', () => {
+      assert.deepStrictEqual(apply(DataTypeOIDs._numeric, [null, '2.5']), [
         null,
-        '2',
+        2.5,
       ]);
     });
 
-    it('splits a money[] literal exactly as pg does', () => {
-      // The fixup takes the server's literal, not an array - and the quoting
-      // is the point: only the grouped element is quoted, because its
-      // separators would otherwise read as delimiters.
-      assert.deepStrictEqual(
-        apply(DataTypeOIDs._money, '{"$99,999,999,999,999.99",-$5.00,NULL}'),
-        ['$99,999,999,999,999.99', '-$5.00', null],
-      );
-    });
-
-    it('passes a money[] value that is not a literal straight through', () => {
-      // `fetchAsString` is what makes the literal arrive; a caller who has
-      // turned it off gets PostgreJS's own array, and mapping it would be
-      // worse than leaving it.
-      assert.deepStrictEqual(apply(DataTypeOIDs._money, [12.34]), [12.34]);
+    it('passes a numeric[] value that is not an array straight through', () => {
+      // `fetchAsString` is what makes the elements arrive as strings; a
+      // caller in native decoding never reaches this fixup at all, and a
+      // caller who named the array OID gets the literal, which must not be
+      // mapped character by character.
+      assert.strictEqual(apply(DataTypeOIDs._numeric, '{1.5}'), '{1.5}');
     });
 
     it('has no fixup for a column whose type is unknown', () => {
       assert.strictEqual(fixupFor(undefined), undefined);
       assert.strictEqual(fixupFor(DataTypeOIDs.int4), undefined);
+    });
+
+    it('needs none for int8[] or money[]', () => {
+      // Both had one until `fetchAsString` learned to name an array column
+      // by its element type. Asserted rather than just deleted, because a
+      // fixup reappearing here would mean that behaviour regressed.
+      assert.strictEqual(fixupFor(DataTypeOIDs._int8), undefined);
+      assert.strictEqual(fixupFor(DataTypeOIDs._money), undefined);
     });
   });
 

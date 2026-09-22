@@ -124,10 +124,13 @@ describe('toPgResult', () => {
       );
     });
 
-    it('stringifies int8 array elements, exactly past 2^53', () => {
+    it('parseFloats numeric array elements, as pg does', () => {
+      // The one fixup that makes a value *less* precise, deliberately:
+      // `pg-types` runs `arrayParser.create(value, parseFloat)` for
+      // `numeric[]` even though scalar `numeric` stays a string.
       assert.deepStrictEqual(
-        resultWith(DataTypeOIDs._int8, [1, 9007199254740993n]),
-        ['1', '9007199254740993'],
+        resultWith(DataTypeOIDs._numeric, ['1.5', '2.5', null]),
+        [1.5, 2.5, null],
       );
     });
 
@@ -146,10 +149,10 @@ describe('toPgResult', () => {
     it('does nothing at all in native decoding mode', () => {
       const v = resultWith(DataTypeOIDs.point, { x: 1, y: 2 }, false);
       assert.deepStrictEqual(v, { x: 1, y: 2 });
-      assert.strictEqual(
-        resultWith(DataTypeOIDs._int8, [1, 2], false)[0],
-        1,
-        'int8[] stays numeric',
+      assert.deepStrictEqual(
+        resultWith(DataTypeOIDs._numeric, ['1.5'], false),
+        ['1.5'],
+        'numeric[] keeps whatever the wire gave',
       );
     });
 
