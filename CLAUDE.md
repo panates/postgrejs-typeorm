@@ -99,16 +99,19 @@ the only remaining advantage. Do not reopen that without new evidence.
   up, it is measured against the `node_modules` build and then **fixed in PostgreJS** - written up
   in `../postgrejs/.claude/` - rather than patched around here. The knowledge of what `pg` answers
   belongs in the client that decodes, once, not reconstructed afterwards by every adapter.
-  `.claude/pg-compatible-decoding.md` is the open one and it is what removes `value-shapes.ts`.
+  That round is done: `value-shapes.ts` and both dependencies are gone, and the divergences that
+  justified them were closed upstream instead (`313c71e`, `3d84fb5`, `8d30acc`, `ac5ba39`).
 
   Re-run the type matrix after every upstream bump, not only the TypeORM suite. **`money` is the
   worked example**: a new decoder upstream is a new *divergence* here, because the facade's job is
   to answer what `pg` answers - and `pg` has no parser for `money` at all. The suite is silent
   about it; the matrix failed on the first run.
 
-  So the empty-statement fallback and the caret-stripping fallback in `src/errors.ts` are **not**
-  dead code on 3.8.0 - they are what a user installing from npm today still needs. Check a fix's
-  release before deleting the thing that works around it: `git tag --contains <sha>`.
+  The caret-stripping fallback that used to be in `src/errors.ts` is gone for the same reason -
+  `serverMessage` is in the build, so the regex was a branch for a version this package will never
+  be installed against. It was not replaced with anything: an error carrying a caret diagram but no
+  `serverMessage` did not come from this client, and guessing at its shape is what the field was
+  added to stop.
 - **TypeORM**: peer is **`>=0.3.0 <2`**. The lines that touch `pg` are unchanged from **0.2.39** -
   where `options.driver` was introduced, 2021-11-09 - to 1.1.1, apart from `defaults.parseInt8` added
   in the 0.3 line and `||` becoming `??` at 1.0.0. The same facade was run against 0.3.31 and 1.1.1
