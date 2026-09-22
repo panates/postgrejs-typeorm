@@ -347,6 +347,16 @@ export class PgClient extends EventEmitter {
         };
       // One command in, one result out - `pg` unwraps that case and returns
       // an array only when there really were several.
+      //
+      // The single-result arm is **unreachable through the public API** and
+      // is kept as a contract rather than a branch anyone takes. Measured:
+      // PostgreSQL's extended protocol accepts empty statements around one
+      // real one - `';select 1'`, `'select 1;;'`, `'select 1; ;'` all
+      // succeed there - so 42601 is raised only by two or more *real*
+      // statements, and those always come back as two or more results. An
+      // empty string returns above. So `_simple` sees either 0 or 2+, and
+      // this line is what keeps the unwrapping correct if that ever stops
+      // being true. It is the one uncovered line in `src/`.
       return results.length === 1
         ? toPgResult(results[0])
         : toPgResults(results);

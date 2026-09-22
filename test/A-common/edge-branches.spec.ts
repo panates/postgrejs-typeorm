@@ -44,6 +44,25 @@ describe('edge branches', () => {
       });
     }
 
+    it('renders a typed array inside an array as pg does', () => {
+      // An array element goes through a different arm than a top-level
+      // value: a Uint8Array has to become bytea hex there too, and only a
+      // real Buffer skips the copy.
+      const v = [new Uint8Array([1, 2]), Buffer.from([3, 4])];
+      assert.strictEqual(prepareValue(v), pgPrepare(v));
+    });
+
+    it('renders a BC date from its UTC fields, which is its own branch', () => {
+      // `parseInputDatesAsUTC` has a BC arm of its own, separate from the
+      // local one. `pg`'s own function reads a module-level default rather
+      // than an argument, so the expected string is written out here - it is
+      // the same shape the non-BC UTC test in prepare-value.spec.ts pins.
+      assert.strictEqual(
+        prepareValue(new Date(Date.UTC(-1, 0, 1)), undefined, true),
+        '0002-01-01T00:00:00.000+00:00 BC',
+      );
+    });
+
     it('renders a BC year as pg does', () => {
       const d = new Date(Date.UTC(-1, 0, 1));
       assert.strictEqual(prepareValue(d), pgPrepare(d));

@@ -1,4 +1,6 @@
 import assert from 'node:assert';
+import { Pool as ControlPool } from 'pg';
+import { DataTypeOIDs } from 'postgrejs';
 import { defaults, PgClient, type PgResult } from '../../src/index.js';
 import { facadePool, liveConfig } from '../_support/live.js';
 
@@ -162,6 +164,291 @@ describe('B-live: the pg surface that nothing else exercises', () => {
       assert.strictEqual(pool.ending, false);
       await pool.end();
       assert.strictEqual(pool.ending, true);
+    });
+  });
+
+  describe('the query-config object', () => {
+    // `pg` takes `{text, values}` as well as `(text, values)`, and TypeORM
+    // uses the positional form everywhere - so this is knex's path, and the
+    // one a coverage report finds because nothing else here takes it.
+    it('reads values off the config object', async () => {
+      const pool = facadePool();
+      try {
+        const r = await pool.query({
+          text: 'select $1::int as n',
+          values: [7],
+        } as any);
+        assert.strictEqual(r.rows[0].n, 7);
+      } finally {
+        await pool.end();
+      }
+    });
+  });
+
+  describe('several results from one string', () => {
+    // `pg` returns a bare **array** of results for a multi-statement string
+    // and a single result otherwise. Both arms matter: unwrapping the
+    // one-result case is what a caller reading `r.rows` depends on.
+    it('gives an array, one entry per command', async () => {
+      const pool = facadePool();
+      const client = (await pool.connect()) as PgClient;
+      try {
+        const r = (await client.query(
+          'select 1 as a; select 2 as b',
+        )) as unknown as PgResult[];
+        assert.ok(
+          Array.isArray(r),
+          'a multi-statement string answers with an array',
+        );
+        assert.strictEqual(r.length, 2);
+        assert.deepStrictEqual(
+          r.map(x => x.rows),
+          [[{ a: 1 }], [{ b: 2 }]],
+        );
+      } finally {
+        client.release!();
+        await pool.end();
+      }
+    });
+
+    it('unwraps the single-command case', async () => {
+      const pool = facadePool();
+      const client = (await pool.connect()) as PgClient;
+      try {
+        const r = (await client.query('select 1 as a;')) as PgResult;
+        assert.ok(!Array.isArray(r));
+        assert.deepStrictEqual(r.rows, [{ a: 1 }]);
+      } finally {
+        client.release!();
+        await pool.end();
+      }
+    });
+
+    it('unwraps it on the simple protocol too', async () => {
+      // A leading semicolon is an empty statement, which the extended
+      // protocol refuses with 42601 - so this takes the fallback and comes
+      // out of it with exactly one result. Same arm, different route, and
+      // the only way to reach that one.
+      const pool = facadePool();
+      const client = (await pool.connect()) as PgClient;
+      try {
+        const r = (await client.query(';select 1 as a')) as PgResult;
+        assert.ok(!Array.isArray(r));
+        assert.deepStrictEqual(r.rows, [{ a: 1 }]);
+        assert.strictEqual(r.command, 'SELECT');
+      } finally {
+        client.release!();
+        await pool.end();
+      }
+    });
+  });
+
+  describe('the two ways out of the facade', () => {
+    // Both are documented escape hatches and neither is on TypeORM's path,
+    // so nothing else here reaches them.
+    it('exposes the backend pid under pg spelling', async () => {
+      const pool = facadePool();
+      const client = (await pool.connect()) as PgClient;
+      try {
+        const reported = client.processID;
+        const asked = (
+          (await client.query('select pg_backend_pid() as pid')) as PgResult
+        ).rows[0].pid;
+        assert.strictEqual(reported, asked, 'and it has to be the real one');
+      } finally {
+        client.release!();
+        await pool.end();
+      }
+    });
+
+    it('hands out the PostgreJS connection underneath', async () => {
+      const pool = facadePool();
+      const client = (await pool.connect()) as PgClient;
+      try {
+        const r = await client.connection.query('select 1 as n', {
+          objectRows: true,
+        });
+        assert.strictEqual(r.rows![0].n, 1);
+      } finally {
+        client.release!();
+        await pool.end();
+      }
+    });
+  });
+
+  describe('extra fetchAsString OIDs from the caller', () => {
+    it('appends them to the list the pg mode already uses', async () => {
+      // `float8` is not in the built-in list - `pg` parses it to a number and
+      // so does PostgreJS - so asking for it is visibly the caller's doing,
+      // and the built-ins have to survive alongside.
+      const pool = facadePool({
+        postgrejs: { fetchAsString: [DataTypeOIDs.float8] },
+      });
+      try {
+        const r = await pool.query(
+          `select '1.5'::float8 as f, '9007199254740993'::int8 as i`,
+        );
+        assert.strictEqual(r.rows[0].f, '1.5', "the caller's OID");
+        assert.strictEqual(
+          r.rows[0].i,
+          '9007199254740993',
+          'and the built-in list is still there',
+        );
+      } finally {
+        await pool.end();
+      }
+    });
+  });
+
+  describe("the events pg's Client emits", () => {
+    // Relayed from the PostgreJS connection, and none of them is on TypeORM's
+    // path - it listens for 'error' on the pool and nothing on the client. A
+    // consumer doing LISTEN/NOTIFY, or logging server notices, needs all
+    // three, so they are tested here rather than left to a first user.
+    it("relays a server NOTICE to 'notice'", async () => {
+      const pool = facadePool();
+      const client = (await pool.connect()) as PgClient;
+      const notices: any[] = [];
+      client.on('notice', m => notices.push(m));
+      try {
+        await client.query(
+          `do $$ begin raise notice 'hello from plpgsql'; end $$;`,
+        );
+        await new Promise(r => setTimeout(r, 200));
+        assert.strictEqual(notices.length, 1, 'exactly one notice');
+        assert.match(
+          String(notices[0].message ?? notices[0]),
+          /hello from plpgsql/,
+        );
+      } finally {
+        client.release!();
+        await pool.end();
+      }
+    });
+
+    it("relays LISTEN/NOTIFY to 'notification'", async () => {
+      const pool = facadePool({ max: 2 });
+      const listener = (await pool.connect()) as PgClient;
+      const notifications: any[] = [];
+      listener.on('notification', m => notifications.push(m));
+      try {
+        await listener.query('listen facade_channel');
+        const sender = (await pool.connect()) as PgClient;
+        await sender.query(`notify facade_channel, 'payload here'`);
+        sender.release!();
+        await new Promise(r => setTimeout(r, 300));
+        assert.strictEqual(notifications.length, 1);
+        assert.strictEqual(notifications[0].channel, 'facade_channel');
+        assert.strictEqual(notifications[0].payload, 'payload here');
+      } finally {
+        listener.release!();
+        await pool.end();
+      }
+    });
+
+    it("does NOT relay a dying connection to 'error' - pg does", async () => {
+      // A divergence, recorded rather than worked around. `pg`'s Client
+      // rejects the in-flight query with 57P01 *and* emits 'error' on the
+      // client; PostgreJS's Connection rejects with 08006 and emits 'close',
+      // with no 'error' at all - so the facade's relay has nothing to relay.
+      // It matters because `pg`'s own docs tell a caller to attach
+      // `client.on('error')` precisely for this, and here it never fires.
+      //
+      // The relay stays: it is right for any 'error' the connection does
+      // emit, and it starts working the day this is closed - at which point
+      // this test fails and has to be rewritten. Reported in
+      // `../postgrejs/.claude/connection-error-event.md`.
+      const pool = facadePool({ max: 2 });
+      const killer = new ControlPool(liveConfig());
+      const client = (await pool.connect()) as PgClient;
+      const errors: any[] = [];
+      const closes: any[] = [];
+      client.on('error', e => errors.push(e));
+      client.connection.on('close', () => closes.push('close'));
+      try {
+        const pid = (
+          (await client.query('select pg_backend_pid() as pid')) as PgResult
+        ).rows[0].pid;
+        const inflight = client.query('select pg_sleep(5)').then(
+          () => 'resolved',
+          (e: any) => e.code,
+        );
+        await new Promise(r => setTimeout(r, 300));
+        await killer.query('select pg_terminate_backend($1)', [pid]);
+        assert.strictEqual(
+          await inflight,
+          '08006',
+          'the query still reports it',
+        );
+        await new Promise(r => setTimeout(r, 500));
+        assert.deepStrictEqual(
+          errors,
+          [],
+          "nothing reaches client.on('error')",
+        );
+        assert.deepStrictEqual(
+          closes,
+          ['close'],
+          "'close' is what arrives instead",
+        );
+      } finally {
+        client.release!();
+        await killer.end();
+        await pool.end();
+      }
+    });
+  });
+
+  describe('normalizeErrors: false', () => {
+    // On by default, and the off arm is a documented option nothing else
+    // here takes - so `pg`'s two cosmetic divergences come back.
+    it('leaves the caret diagram and the numeric position alone', async () => {
+      const pool = facadePool({ postgrejs: { normalizeErrors: false } });
+      try {
+        await assert.rejects(
+          () => pool.query('select * from no_such_raw_error'),
+          (e: any) => {
+            assert.strictEqual(e.code, '42P01');
+            assert.notStrictEqual(
+              typeof e.position,
+              'string',
+              'pg renders position as a string; raw leaves it as it came',
+            );
+            return true;
+          },
+        );
+      } finally {
+        await pool.end();
+      }
+    });
+
+    it('passes a pool error through unnormalised too', async () => {
+      const pool = facadePool({
+        max: 2,
+        postgrejs: {
+          normalizeErrors: false,
+          suppressRedundantPoolError: false,
+        },
+      });
+      const killer = new ControlPool(liveConfig());
+      const errors: any[] = [];
+      pool.on('error', e => errors.push(e));
+      try {
+        const client = (await pool.connect()) as PgClient;
+        const pid = (
+          (await client.query('select pg_backend_pid() as pid')) as PgResult
+        ).rows[0].pid;
+        client.release!();
+        await killer.query('select pg_terminate_backend($1)', [pid]);
+        await new Promise(r => setTimeout(r, 1500));
+        assert.deepStrictEqual(
+          errors.map(e => e.code),
+          ['08006'],
+        );
+      } finally {
+        await killer.end();
+        await pool.end();
+      }
     });
   });
 

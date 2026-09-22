@@ -161,6 +161,35 @@ describe('B-live: error paths', () => {
       }
     });
 
+    it('DOES raise one for a connection that died idle in the pool', async () => {
+      // The other half of `suppressRedundantPoolError`, and the reason it is
+      // keyed on which pids are checked out rather than on "a query already
+      // failed". Nobody is holding this connection, so nobody is getting a
+      // rejection for it - and an error nobody would otherwise hear about is
+      // exactly what a pool error is for.
+      const pool = facadePool({ max: 2 });
+      const killer = new ControlPool(liveConfig());
+      const poolErrors: any[] = [];
+      pool.on('error', e => poolErrors.push(e));
+      try {
+        const client = (await pool.connect()) as PgClient;
+        const pid = (
+          (await client.query('select pg_backend_pid() as pid')) as PgResult
+        ).rows[0].pid;
+        client.release!(); // back in the pool, idle, held by no one
+        await killer.query('select pg_terminate_backend($1)', [pid]);
+        await new Promise(r => setTimeout(r, 1500));
+        assert.deepStrictEqual(
+          poolErrors.map(e => e.code),
+          ['08006'],
+          'this one has no other way to reach the caller',
+        );
+      } finally {
+        await killer.end();
+        await pool.end();
+      }
+    });
+
     it('does not raise a pool error the query already carries', async () => {
       // PostgreJS reports a dead pooled connection on the pool as well as
       // rejecting the in-flight query; `pg` only rejects the query. Left
@@ -192,6 +221,55 @@ describe('B-live: error paths', () => {
         await killer.end();
         await pool.end();
       }
+    });
+  });
+
+  describe('end() when the way out itself fails', () => {
+    // `pg` routes an error to the callback when one was given and rejects
+    // when it was not, and both `end()`s here do the same. Nothing on a
+    // healthy server makes either fail - ending twice is a no-op on both -
+    // so the failure is injected. That is the honest way to reach it: the
+    // branch under test is the facade's error routing, not whether
+    // PostgreJS can close a socket.
+    it('a client rejects, or calls back, when release() throws', async () => {
+      const pool = facadePool();
+      try {
+        const rejecting = (await pool.connect()) as PgClient;
+        const realRelease = rejecting.release!;
+        rejecting.release = () => {
+          throw new Error('release blew up');
+        };
+        await assert.rejects(() => rejecting.end(), /release blew up/);
+        rejecting.release = realRelease;
+        rejecting.release();
+
+        const callingBack = (await pool.connect()) as PgClient;
+        const realRelease2 = callingBack.release!;
+        callingBack.release = () => {
+          throw new Error('release blew up');
+        };
+        const err = await new Promise<any>(ok => callingBack.end(e => ok(e)));
+        assert.match(err.message, /release blew up/);
+        callingBack.release = realRelease2;
+        callingBack.release();
+      } finally {
+        await pool.end();
+      }
+    });
+
+    it('a pool rejects, or calls back, when the underlying close() throws', async () => {
+      const failing = () => {
+        const p = facadePool();
+        (p as any)._pool = {
+          close: () => Promise.reject(new Error('close blew up')),
+        };
+        return p;
+      };
+      await assert.rejects(() => failing().end(), /close blew up/);
+      const err = await new Promise<any>(ok => {
+        void failing().end(e => ok(e));
+      });
+      assert.match(err.message, /close blew up/);
     });
   });
 
