@@ -1,7 +1,7 @@
 {
   "name": "typeorm-postgrejs",
   "description": "A pg-compatible facade over PostgreJS - run TypeORM on PostgreJS's wire-protocol client instead of pg",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Panates",
   "license": "BSD-3-Clause",
   "private": true,

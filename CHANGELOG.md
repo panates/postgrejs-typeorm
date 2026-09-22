@@ -1,6 +1,13 @@
 ## Changelog
 
-### [v1.0.0](https://github.com/panates/postgrejs-typeorm/compare/v0.0.1...v1.0.0) - 
+### [v1.0.1](https://github.com/panates/postgrejs-typeorm/compare/v1.0.0...v1.0.1) - 
+
+#### 📖 Documentation Changes
+
+- docs: say what a reader gains, not what the package is not @Eray Hanoğlu 
+- docs: drop the pre-release note @Eray Hanoğlu 
+
+## [v1.0.0](https://github.com/panates/postgrejs-typeorm/compare/v0.0.1...v1.0.0) -  22 September 2026 
 
 #### 🚀 New Features
 
