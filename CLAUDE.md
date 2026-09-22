@@ -45,6 +45,27 @@ So the pitch is **"a `pg` facade that TypeORM and knex can both use"**, not "rep
 everywhere". TypeORM alone still justifies it - but do not make the argument on pg-promise or
 Sequelize.
 
+**This package ships as `typeorm-postgrejs`, and knex gets its own repository with its own copy of
+`src/`.** Settled, with the cost accepted rather than overlooked: the two copies can drift. Do not
+reopen it as "extract a shared core" - a name people search for is worth more than a deduplicated
+tree, and a knex user reading `typeorm-postgrejs` in their lockfile is the same loss of confidence
+moved somewhere it cannot be explained away.
+
+What makes the duplication survivable is already here and has to be copied with the code: **`pg` is
+the live oracle in `test/B-live`, not a table of expected values.** Two copies held to the same
+third party cannot silently disagree with each other without one of them first disagreeing with
+`pg` - so neither repository ever needs to compare itself to the other. Port the test design, not
+just `src/`.
+
+The two consumers overlap less than the shared code suggests, which is why the copy is thin work
+rather than a second project. Measured against `knex@3.3.0` and `typeorm@1.1.1`: TypeORM enters
+through `new postgres.Pool(...)` and never constructs a `Client`; knex enters through
+`new driver.Client(...)`, pools with `tarn`, and never touches `pg`'s `Pool`. knex also cannot be
+handed the module - `require('pg')` is hard-wired in `Client_PG._driver()`
+(`lib/dialects/postgres/index.js:63-65`) - so the knex side is a subclass overriding that one
+method, plus the callback and query-config call forms it uses throughout. Everything underneath is
+the same facade.
+
 Prisma was the other candidate and was rejected on evidence, not taste: its adapters must return
 `SqlResultSet { columnTypes: ColumnType[], columnNames, rows }`, where `ColumnType` is Prisma's own
 ~30-value enum and the doc comment says the values are *"used within the Query Engine to convert
