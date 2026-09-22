@@ -64,6 +64,13 @@ the only remaining advantage. Do not reopen that without new evidence.
   | a `Date` parameter goes out unspecified (`1c3891a`) | an array is typed from its first non-null value (`49c045d`) |
   | a string parameter goes out unspecified (`cd52507`) | `err.serverMessage` (`e413ae9`) |
   | server notices reach the connection (`8ecf16e`) | pooled-connection pipelining, opt-in (`4e9a609`, `be0ef23`) |
+  | | a text date is read in the server's own `DateStyle` (`4c1154b`) |
+  | | `money` is decoded rather than left a `Buffer` (`285097e`, `3ed2812`) |
+
+  The last two are the reason to re-run the type matrix after every upstream bump rather than only
+  the TypeORM suite. **`money` is the worked example**: a new decoder upstream is a new *divergence*
+  here, because the facade's job is to answer what `pg` answers - and `pg` has no parser for
+  `money` at all. The suite is silent about it; the matrix failed on the first run.
 
   So the empty-statement fallback and the caret-stripping fallback in `src/errors.ts` are **not**
   dead code on 3.8.0 - they are what a user installing from npm today still needs. Check a fix's

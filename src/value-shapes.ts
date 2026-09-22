@@ -1,14 +1,18 @@
 import { DataTypeOIDs } from 'postgrejs';
+import postgresArray from 'postgres-array';
 import postgresInterval from 'postgres-interval';
 
 /**
- * The four shapes no wire option can produce.
+ * The shapes no wire option can produce.
  *
  * `fetchAsString` gets the server's own text and PostgreJS's decoders give a
- * class instance, but for these four `pg` gives a plain object or an array of
+ * class instance, but for these `pg` gives a plain object or an array of
  * strings - a third shape that is neither end of the wire. So they are mapped
  * after decoding. Measured, this is what takes the type matrix from 58/64 to
- * 64/64 (`doc/DRIVER-DESIGN.md` §6).
+ * 64/64 (`doc/DRIVER-DESIGN.md` §6). `money[]` joined them when PostgreJS
+ * gained a `money` decoder; it is the one whose text form is fetched *and*
+ * mapped, because `pg` gives neither the literal nor a decoded number but an
+ * array of the server's strings.
  *
  * `postgres-interval` is a dependency for exactly one of them, and it is the
  * one that cannot be approximated: `pg` returns a `PostgresInterval`
@@ -51,6 +55,20 @@ const FIXUPS = new Map<number, Fixup>(
       [
         DataTypeOIDs._int8,
         (v: any[]) => v.map(n => (n == null ? n : String(n))),
+      ],
+      // `money[]` arrives as the server's own literal (see constants.ts) and
+      // is split here. `postgres-array` is the second dependency, and for the
+      // same reason as the first: it is the exact library `pg` uses for this
+      // type - `pg-types` does `register(791, parseStringArray)`, and that
+      // function is `arrayParser.create(value).parse()`. Given the same
+      // literal it cannot disagree. Writing a splitter here would be an
+      // approximation of something that has to be exact, and the literal is
+      // where it is hardest to hand-roll: `{"$99,999,999,999,999.99",-$5.00}`
+      // quotes only the element whose grouping separators would otherwise
+      // read as delimiters.
+      [
+        DataTypeOIDs._money,
+        (v: any) => (typeof v === 'string' ? postgresArray.parse(v) : v),
       ],
     ] as [number, Fixup][]
   ).filter(([oid]) => typeof oid === 'number'),

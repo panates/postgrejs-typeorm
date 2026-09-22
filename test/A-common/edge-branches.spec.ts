@@ -86,6 +86,23 @@ describe('edge branches', () => {
       ]);
     });
 
+    it('splits a money[] literal exactly as pg does', () => {
+      // The fixup takes the server's literal, not an array - and the quoting
+      // is the point: only the grouped element is quoted, because its
+      // separators would otherwise read as delimiters.
+      assert.deepStrictEqual(
+        apply(DataTypeOIDs._money, '{"$99,999,999,999,999.99",-$5.00,NULL}'),
+        ['$99,999,999,999,999.99', '-$5.00', null],
+      );
+    });
+
+    it('passes a money[] value that is not a literal straight through', () => {
+      // `fetchAsString` is what makes the literal arrive; a caller who has
+      // turned it off gets PostgreJS's own array, and mapping it would be
+      // worse than leaving it.
+      assert.deepStrictEqual(apply(DataTypeOIDs._money, [12.34]), [12.34]);
+    });
+
     it('has no fixup for a column whose type is unknown', () => {
       assert.strictEqual(fixupFor(undefined), undefined);
       assert.strictEqual(fixupFor(DataTypeOIDs.int4), undefined);

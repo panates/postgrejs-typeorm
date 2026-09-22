@@ -336,16 +336,29 @@ would receive:
 <sub>\*A was measured on the first, 56-case pass; B/D/E on the second, 64-case pass. B appears in both.</sub>
 
 **`unknownTypesAsString: true` alone is worth 8 cases** and is not optional: without it an `enum`
-column returns a raw `Buffer`, and so do composites, `money` and everything else PostgreJS has no
-decoder for.
+column returns a raw `Buffer`, and so do composites and everything else PostgreJS has no decoder
+for.
+
+> `money` was in that list when this was measured and is not any more. PostgreJS gained a decoder
+> for it (upstream `285097e`, `3ed2812`) which returns a **number**, where `pg` returns the server's
+> own text - `$99,999,999,999,999.99`, symbol, grouping and all, because `pg-types` registers no
+> parser for OID 790. So `money` moved into `fetchAsString`, and `money[]` needed both halves: `pg`
+> *does* give a real array for it (`register(791, parseStringArray)`) whose elements are that same
+> text, which no amount of formatting rebuilds from a number. The literal is fetched and split with
+> `postgres-array`, the library `pg` splits it with.
+>
+> This is the shape of change to expect from here: the divergence list is not a property of the two
+> libraries but of a moment in both. It was the **type matrix that caught it**, not the TypeORM
+> suite - `money` appears nowhere in TypeORM's tests - which is the argument for keeping `pg` as the
+> oracle rather than a table.
 
 **The `fetchAsString` list, re-derived.** Only types where `pg`'s own value is a string and
 PostgreJS's is not:
 
 ```
-int8, numeric, time, interval,
+int8, numeric, time, interval, money,
 line, lseg, box, path, polygon,
-_line, _lseg, _box, _path, _polygon, _circle,
+_line, _lseg, _box, _path, _polygon, _circle, _money,
 + the range family (int4range, int8range, numrange, daterange, tsrange, tstzrange,
   their multirange counterparts, and the array OIDs of each)
 ```
@@ -353,7 +366,8 @@ _line, _lseg, _box, _path, _polygon, _circle,
 **An array OID in that list is a different thing from a scalar one**, and getting it wrong is easy:
 it makes the whole array literal come back as **one string**, not as a JS array. So an array type
 belongs there only where `pg` also hands back a string - which, measured, is the geometric family
-**except `point[]`**:
+**except `point[]`**, plus `money[]`, which is there for the opposite reason and is mapped back into
+an array afterwards:
 
 | | `pg` | PostgreJS, native |
 | --- | --- | --- |

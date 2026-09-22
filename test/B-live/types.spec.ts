@@ -65,6 +65,10 @@ const TYPES: [string, string][] = [
   ['_timestamp', `'{"2024-03-05 06:07:08"}'::timestamp[]`],
   ['_timestamptz', `'{"2024-03-05 06:07:08+00"}'::timestamptz[]`],
   ['_interval', `'{"1 day"}'::interval[]`],
+  // money[] was missing from this matrix until PostgreJS gained a `money`
+  // decoder and only the scalar row caught it. The grouped value is the
+  // interesting one: it is the element the literal has to quote.
+  ['_money', `array['12.34'::money, '99999999999999.99'::money, null]`],
   ['_point', `'{"(1,2)"}'::point[]`],
   ['_inet', `'{192.168.0.1}'::inet[]`],
   ['_jsonb', `'{"{\\"a\\":1}"}'::jsonb[]`],

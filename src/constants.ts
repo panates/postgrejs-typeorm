@@ -42,6 +42,12 @@ export const FETCH_AS_STRING_OIDS: number[] = [
   DataTypeOIDs.numeric,
   DataTypeOIDs.time,
   DataTypeOIDs.interval,
+  // `pg-types` registers no parser for `money` at all, so `pg` hands back
+  // the server's own text - symbol, grouping and the scale `lc_monetary`
+  // decides: `$99,999,999,999,999.99`. PostgreJS gained a decoder for it
+  // (upstream `285097e`) and returns a number, which drops all three. Asking
+  // for text gets `pg`'s answer byte for byte.
+  DataTypeOIDs.money,
   DataTypeOIDs.line,
   DataTypeOIDs.lseg,
   DataTypeOIDs.box,
@@ -57,6 +63,12 @@ export const FETCH_AS_STRING_OIDS: number[] = [
   DataTypeOIDs._path,
   DataTypeOIDs._polygon,
   DataTypeOIDs._circle,
+  // `money[]` is here for a different reason than the geometric arrays: `pg`
+  // *does* give a real array for it (`register(791, parseStringArray)`), but
+  // its elements are the server's text, which cannot be rebuilt from the
+  // numbers PostgreJS decodes. So the literal is fetched and split with the
+  // same library `pg` splits it with - see value-shapes.ts.
+  DataTypeOIDs._money,
   // Deliberately NOT here, though their scalar forms are: `pg` parses these
   // into real arrays, so asking for the literal would be a worse answer than
   // PostgreJS's own decoding. They are mapped element by element instead -

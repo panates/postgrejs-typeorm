@@ -41,6 +41,11 @@ const CASES: [string, string, any[]][] = [
   ],
   ['date', 'select $1::date::text v', [new Date('2024-03-05T06:07:08.900Z')]],
   ['interval', 'select $1::interval::text v', ['1 day 2 hours']],
+  // `money` has a binary encoder upstream now, so the outbound direction is
+  // worth pinning too and not only what comes back: a number and the
+  // server's own rendering both have to land on the same value `pg` lands on.
+  ['money from a number', 'select $1::money::text v', [12.34]],
+  ['money as rendered', 'select $1::money::text v', ['$12.34']],
   ['int4 array', 'select $1::int4[]::text v', [[1, 2, 3]]],
   ['text array', 'select $1::text[]::text v', [['a', 'b']]],
   ['empty array', 'select $1::text[]::text v', [[]]],
