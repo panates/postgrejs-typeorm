@@ -346,25 +346,20 @@ describe('B-live: the pg surface that nothing else exercises', () => {
       }
     });
 
-    it("does NOT relay a dying connection to 'error' - pg does", async () => {
-      // A divergence, recorded rather than worked around. `pg`'s Client
-      // rejects the in-flight query with 57P01 *and* emits 'error' on the
-      // client; PostgreJS's Connection rejects with 08006 and emits 'close',
-      // with no 'error' at all - so the facade's relay has nothing to relay.
-      // It matters because `pg`'s own docs tell a caller to attach
-      // `client.on('error')` precisely for this, and here it never fires.
+    it("relays a dying connection to 'error'", async () => {
+      // `pg`'s own docs tell a caller to attach this, because an idle client
+      // whose connection drops otherwise takes the process down. It used to
+      // fire on `pg` and not here - PostgreJS emitted only 'close', which is
+      // also what an orderly close() emits, so a listener could not tell the
+      // two apart. Reported, and fixed upstream in `93b07c3`.
       //
-      // The relay stays: it is right for any 'error' the connection does
-      // emit, and it starts working the day this is closed - at which point
-      // this test fails and has to be rewritten. Reported in
-      // `../postgrejs/.claude/connection-error-event.md`.
+      // The SQLSTATE still differs and is left alone: `pg` reports the
+      // server's own 57P01, this reports 08006 for the lost connection.
       const pool = facadePool({ max: 2 });
       const killer = new ControlPool(liveConfig());
       const client = (await pool.connect()) as PgClient;
       const errors: any[] = [];
-      const closes: any[] = [];
       client.on('error', e => errors.push(e));
-      client.connection.on('close', () => closes.push('close'));
       try {
         const pid = (
           (await client.query('select pg_backend_pid() as pid')) as PgResult
@@ -375,22 +370,14 @@ describe('B-live: the pg surface that nothing else exercises', () => {
         );
         await new Promise(r => setTimeout(r, 300));
         await killer.query('select pg_terminate_backend($1)', [pid]);
-        assert.strictEqual(
-          await inflight,
-          '08006',
-          'the query still reports it',
-        );
+        assert.strictEqual(await inflight, '08006', 'the query reports it too');
         await new Promise(r => setTimeout(r, 500));
         assert.deepStrictEqual(
-          errors,
-          [],
-          "nothing reaches client.on('error')",
+          errors.map(e => e.code),
+          ['08006'],
+          "client.on('error') has to fire, exactly once",
         );
-        assert.deepStrictEqual(
-          closes,
-          ['close'],
-          "'close' is what arrives instead",
-        );
+        assert.strictEqual(errors[0].processID, pid, 'and name the backend');
       } finally {
         client.release!();
         await killer.end();

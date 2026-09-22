@@ -41,11 +41,11 @@ decoded:
 ```
 == through TypeORM                        pg      facade     delta
 
-find 5000 entities                    18.998      15.820     -16.7%
-find 100 entities                      0.987       0.826     -16.3%
-findOneBy                              0.598       0.539      -9.8%
-queryBuilder + where (500 rows)        2.892       2.494     -13.8%
-save one entity                        1.809       1.876      +3.7%
+find 5000 entities                    16.611      13.868     -16.5%
+find 100 entities                      0.864       0.739     -14.5%
+findOneBy                              0.605       0.547      -9.6%
+queryBuilder + where (500 rows)        2.472       2.152     -12.9%
+save one entity                        0.937       0.977      +4.2%
 ```
 
 Milliseconds, median. **Reads land 10-17% faster**; writes are inside the noise and swing either way
@@ -55,8 +55,8 @@ is the honest way to read the table, and the reason it includes a shape that mus
 ```
 == raw pool.query()                       pg      facade     delta
 
-select 100 rows                        0.705       0.584     -17.1%
-count + filter (one row, after a scan) 1.537       1.557      +1.3%
+select 100 rows                        0.665       0.567     -14.7%
+count + filter (one row, after a scan) 1.450       1.490      +2.7%
 ```
 
 `count` returns a single row after a scan the server dominates. Neither driver can win it, and it
@@ -70,8 +70,8 @@ npx tsx scripts/bench.mts
 
 The script alternates the two drivers **call by call inside one run** and reports medians, because
 running all of A and then all of B measures the page cache and the JIT rather than the driver. The
-numbers above are Node 24, PostgreSQL 18.4, `pg` 8.23.0, TypeORM 1.1.1, on an M1 Pro against a local
-server. **Over a real network the share of time spent decoding is smaller, so expect less.**
+numbers above are Node 24, PostgreSQL 18.4, `pg` 8.23.0, PostgreJS 3.10.0, TypeORM 1.1.1, on an M1
+Pro against a local server. **Over a real network the share of time spent decoding is smaller, so expect less.**
 
 ### Your rows keep their `pg` values
 
@@ -178,7 +178,7 @@ between runs, and only a control measured in the same invocation is worth compar
 ## Requirements
 
 - Node.js >= 22
-- PostgreJS >= 3.7.0
+- PostgreJS >= 3.10.0
 - TypeORM >= 0.3.0 < 2 (optional peer - the facade does not import TypeORM)
 - `pg-query-stream`, only for `QueryRunner.stream()`
 

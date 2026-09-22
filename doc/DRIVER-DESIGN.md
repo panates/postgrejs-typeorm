@@ -840,6 +840,9 @@ So the empty-statement fallback and the caret-stripping fallback in `src/errors.
 on 3.8.0 - they are what someone installing from npm today still needs. `git tag --contains <sha>`
 before deleting a workaround.
 
+> **Superseded.** Read the 3.10.0 section at the end before acting on that paragraph: the peer floor
+> is 3.10.0 now, both fallbacks are gone, and the rule is the opposite one.
+
 **`err.serverMessage` replaces a regex.** 3.8 keeps PostgreSQL's own undecorated text on the error,
 which is exactly what `pg` puts in `message`, so `normalizeError` copies a field where it used to
 take the decorated text apart. The regex stays as the 3.7 path. The field was added upstream for the
@@ -867,3 +870,49 @@ concurrent `query()` outright ("will be removed in pg@9.0"), and so no consumer 
 can be relying on it. Anyone who wants PostgreJS's concurrency has `client.connection`, which is the
 real `Connection` and is not queued. Streams are deliberately left out of the queue - a cursor is
 read lazily, and holding the queue for its lifetime would deadlock everything behind it.
+
+## Re-measured against PostgreJS 3.10.0 (2026-09-22)
+
+The sections above are a record of how this was arrived at, and two of their instructions no longer
+hold. **The peer floor is `>=3.10.0 <4`**, and `src/` carries nothing for an older one - no
+fallback, no feature test, no `git tag --contains` before deleting a workaround. The reason is not
+that old versions stopped mattering but that PostgreJS is maintained in the next directory and
+released before this package ships, so an unreleased fix is a scheduling detail rather than a
+constraint. A branch written for a version that will not exist by release is dead code someone has
+to find later.
+
+**Every divergence this package found was closed in the client, not worked around here.** That is
+the whole shape of the last few rounds, and it is what the floor buys:
+
+| what `src/` needs | upstream |
+| --- | --- |
+| `fetchAsString` naming an array column by its element type | `313c71e` |
+| `fetchAsString`'s `{ oid, arrays: false }` - `numeric` as text without `numeric[]` | `423977d` |
+| the value classes serialising as their fields rather than the literal | `ac5ba39` |
+| `toPostgres()` on them, so a value read can be written back | `3d84fb5` |
+| `Circle` naming its radius `radius` | `8d30acc` |
+| a lost connection reported on `'error'`, not only `'close'` | `93b07c3` |
+| a text date read in the server's own `DateStyle` | `4c1154b` |
+
+**So the fixup table is gone, and with it every runtime dependency.** §6's answer was "64/64, with a
+`fetchAsString` list, a post-decode fixup table and `postgres-interval`". It is now **64/64 with the
+list alone**: `toPgResult` reshapes the result object and hands the values through exactly as
+PostgreJS decoded them. `value-shapes.ts` does not exist; `postgres-interval` and `postgres-array`
+are not dependencies; `package.json` has no `dependencies` key at all.
+
+Three types still come back as a PostgreJS class where `pg` gives a plain object - `interval`,
+`point`, `circle`. That is **not** a divergence in the value: same own keys, same values, same
+`JSON.stringify`. It is a superset, and `test/B-live/types.spec.ts` asserts it as one, because the
+class answers `toPostgres()` and `pg`'s object does not - a `point` read here goes back to the
+server as a parameter, and `pg`'s own fails `22P02` doing the same. Converting it would have been
+the facade choosing the worse object to match a name.
+
+**Two things `decimalAsString` (`605e91e`) does not replace**, measured, because it looks like it
+should. For `money` it gives the exact decimal without a currency symbol, where `pg` gives the
+server's own `$12.34` - so `fetchAsString` stays. For `numeric` it reaches `numeric[]` as well,
+turning `[1.5, 2.5]` into `['1.5', '2.5']` where `pg` runs `parseFloat` per element - so the
+`{ arrays: false }` selector stays too.
+
+The caret-stripping regex in `errors.ts` is gone and deliberately not replaced. An error carrying a
+caret diagram but no `serverMessage` did not come from this client, and guessing at its shape is
+what that field was added to stop.

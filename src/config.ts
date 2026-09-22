@@ -62,17 +62,14 @@ export interface PgjsFacadeOptions {
    * of the same SQL. Set `false` for PgBouncer in transaction pooling mode
    * before 1.21, where a named statement does not survive to the next call.
    *
-   * **Needs PostgreJS newer than 3.8.0 if the session's `DateStyle` is not
-   * ISO.** This option and `unknownTypesAsString` together ask the server for
-   * the whole row as text, and up to and including published 3.8.0 the text
-   * timestamp decoder fell back to `new Date(str)` for anything that was not
-   * PostgreSQL's ISO output - which V8 accepts and reads as `MM.DD.YYYY`, so
-   * under `DateStyle='German, DMY'` a stored 2024-03-05 came back as
-   * 2024-05-03: a valid date, silently not the one that was stored. Fixed
-   * upstream in `4c1154b`, which reads the `DateStyle` the server reports;
-   * `test/B-live/date-style.spec.ts` holds it to the binary path's answer
-   * across every style. On an older build, leave this alone or set
-   * `DateStyle` to ISO - the binary path it turns off was always correct.
+   * It is not free, and the reason is worth knowing: this together with
+   * `unknownTypesAsString` asks the server for the whole row as **text**,
+   * where the default path reads binary. Text carries the session's
+   * formatting, so a `DateStyle` that is not ISO used to decode to a
+   * different date than the one stored - silently, for any day up to twelve.
+   * PostgreJS reads the `DateStyle` the server reports now (`4c1154b`), and
+   * `test/B-live/date-style.spec.ts` holds the text path to the binary
+   * path's answer across every style and field order, on this option too.
    */
   prepare?: boolean;
 

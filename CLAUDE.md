@@ -75,18 +75,21 @@ the only remaining advantage. Do not reopen that without new evidence.
 
 ## Where things are
 
-- **PostgreJS**: `../postgrejs`. Its `CLAUDE.md` describes the internals. Peer is `>=3.7.0 <4`.
-  **Which release a fix is in decides what `src/` has to keep carrying**, and the two are easy to
-  confuse because the working copy at `../postgrejs` runs ahead of npm:
+- **PostgreJS**: `../postgrejs`. Its `CLAUDE.md` describes the internals. Peer is **`>=3.10.0 <4`**,
+  and that floor is exact rather than cautious - `src/` uses six things that all landed in 3.10.0
+  and nothing works without them:
 
-  | in published **3.8.0** | still unreleased |
+  | what `src/` needs | upstream |
   | --- | --- |
-  | binary array lower bound (`1ace8fe`) | `query('')` answers instead of raising (`3a60510`) |
-  | a `Date` parameter goes out unspecified (`1c3891a`) | an array is typed from its first non-null value (`49c045d`) |
-  | a string parameter goes out unspecified (`cd52507`) | `err.serverMessage` (`e413ae9`) |
-  | server notices reach the connection (`8ecf16e`) | pooled-connection pipelining, opt-in (`4e9a609`, `be0ef23`) |
-  | a text date is read in the server's own `DateStyle` (`4c1154b`) | `fetchAsString` names an array by its element type (`313c71e`) |
-  | `money` is decoded rather than left a `Buffer` (`285097e`, `3ed2812`) | `toPostgres()` on the value classes (`3d84fb5`) |
+  | `fetchAsString` naming an array column by its element type | `313c71e` |
+  | `fetchAsString`'s `{ oid, arrays: false }`, which is how `numeric` is asked for without `numeric[]` | `423977d` |
+  | the value classes serialising as their fields, not as the literal | `ac5ba39` |
+  | `toPostgres()` on them, so a value read can be written back | `3d84fb5` |
+  | `Circle` naming its radius `radius` | `8d30acc` |
+  | a lost connection reported on `'error'`, not only `'close'` | `93b07c3` |
+
+  Every one of those was found by this package's own tests and written up in `../postgrejs/.claude/`
+  rather than worked around here, which is why there is no compatibility code to delete.
 
   **Build against the copy in `node_modules`, not against a release.** The table above is for
   reading history, not for deciding what `src/` carries: PostgreJS is maintained in the next
@@ -178,7 +181,7 @@ header before changing it; two things there are not obvious:
 
 ## What PostgreJS gives you
 
-Verified against a live server during the Kysely and Drizzle rounds, brought forward to 3.7, and
+Verified against a live server during the Kysely and Drizzle rounds, brought forward to 3.10, and
 re-checked in the TypeORM round wherever its expectations differ - the entries below say which.
 
 - **`connection.query(sql, options)` returns every row.** `fetchCount` defaults to 0 - the protocol's
@@ -221,7 +224,7 @@ re-checked in the TypeORM round wherever its expectations differ - the entries b
 
 ## The decoding tension - measured, and narrower than it looked
 
-PostgreJS 3.7 registers **125 built-in types** and decodes them into what they are: `Interval`,
+PostgreJS registers **125 built-in types** and decodes them into what they are: `Interval`,
 `Range`, `Numeric`, a class per geometric type, `inet`/`macaddr`/`bit`/`tsvector` as the strings the
 server prints. The worry was that a `pg` facade would have to throw all of that away.
 
@@ -240,7 +243,7 @@ The two divergences this section has always called certain are confirmed, and th
 people notice:
 
 - `numeric` - `pg` returns a string always, `19.99` included. PostgreJS returns a `number`, or a
-  `Numeric` when a double cannot carry the value (3.7, breaking). Keeping PostgreJS's decoding here
+  `Numeric` when a double cannot carry the value. Keeping PostgreJS's decoding here
   destroys precision and TypeORM hands the result straight to the user - a `numeric` column has no
   hydration branch.
 - `int8` - `pg` returns a string. PostgreJS returns a `number`, or a `BigInt` past 2^53.
