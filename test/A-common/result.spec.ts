@@ -99,65 +99,29 @@ describe('toPgResult', () => {
     ]);
   });
 
-  describe('value fixups', () => {
-    const resultWith = (oid: number, value: any, apply = true) =>
-      toPgResult(
-        {
-          command: 'SELECT',
-          rowType: 'object',
-          fields: [field('v', oid)],
-          rows: [{ v: value }],
-        } as any,
-        apply,
-      ).rows[0].v;
-
-    it('turns a Point into a plain {x, y}', () => {
-      const v = resultWith(DataTypeOIDs.point, { x: 1, y: 2 });
-      assert.deepStrictEqual({ ...v }, { x: 1, y: 2 });
-      assert.strictEqual(v.constructor, Object);
-    });
-
-    it("renames a Circle's r to radius", () => {
-      assert.deepStrictEqual(
-        { ...resultWith(DataTypeOIDs.circle, { x: 1, y: 2, r: 3 }) },
-        { x: 1, y: 2, radius: 3 },
-      );
-    });
-
-    it('parseFloats numeric array elements, as pg does', () => {
-      // The one fixup that makes a value *less* precise, deliberately:
-      // `pg-types` runs `arrayParser.create(value, parseFloat)` for
-      // `numeric[]` even though scalar `numeric` stays a string.
-      assert.deepStrictEqual(
-        resultWith(DataTypeOIDs._numeric, ['1.5', '2.5', null]),
-        [1.5, 2.5, null],
-      );
-    });
-
-    it('parses an interval into a PostgresInterval', () => {
-      const v = resultWith(DataTypeOIDs.interval, '1 day 02:00:00');
-      assert.strictEqual(v.constructor.name, 'PostgresInterval');
-      assert.strictEqual(v.days, 1);
-      assert.strictEqual(v.hours, 2);
-      assert.strictEqual(typeof v.toISOString, 'function');
-    });
-
-    it('leaves nulls alone', () => {
-      assert.strictEqual(resultWith(DataTypeOIDs.point, null), null);
-    });
-
-    it('does nothing at all in native decoding mode', () => {
-      const v = resultWith(DataTypeOIDs.point, { x: 1, y: 2 }, false);
-      assert.deepStrictEqual(v, { x: 1, y: 2 });
-      assert.deepStrictEqual(
-        resultWith(DataTypeOIDs._numeric, ['1.5'], false),
-        ['1.5'],
-        'numeric[] keeps whatever the wire gave',
-      );
-    });
-
-    it('leaves a column that needs no fixup untouched', () => {
-      assert.strictEqual(resultWith(DataTypeOIDs.int4, 5), 5);
-    });
+  it('hands every value through exactly as PostgreJS decoded it', () => {
+    // There is no fixup table any more, and this is what says so: a value
+    // that used to be rewritten here - a `point` - now arrives untouched,
+    // class and all. Whatever `pg` answers that PostgreJS does not is fixed
+    // in the decoder, not undone afterwards. See
+    // `../postgrejs/.claude/pg-compatible-decoding.md`, and
+    // `test/B-live/types.spec.ts` for which types are still open.
+    class Point {
+      constructor(
+        readonly x: number,
+        readonly y: number,
+      ) {}
+      toJSON() {
+        return `(${this.x},${this.y})`;
+      }
+    }
+    const given = new Point(1, 2);
+    const got = toPgResult({
+      command: 'SELECT',
+      rowType: 'object',
+      fields: [field('v', DataTypeOIDs.point)],
+      rows: [{ v: given }],
+    } as any).rows[0].v;
+    assert.strictEqual(got, given, 'the very same object, not a copy');
   });
 });

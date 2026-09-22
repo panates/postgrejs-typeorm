@@ -111,9 +111,10 @@ that was expensive to arrive at, with the reason next to it.
 - `constants.ts` - the `fetchAsString` OID list. **An array OID there behaves differently from a
   scalar one** - it makes the whole literal come back as one string - so it belongs there only where
   `pg` also returns a string. That is the geometric family except `point[]`.
-- `value-shapes.ts` - the shapes no wire option can produce. `postgres-interval` is pinned to
-  `^1.2.0`, the major `pg-types@2` resolves; v3 assigns all seven interval fields where v1 assigns
-  only the ones the value carries, and only v1's answer is what a `pg` user sees.
+  There is **no `value-shapes.ts` and no runtime dependency**. Both are gone: the facade hands every
+  value through exactly as PostgreJS decoded it. What is still not `pg`'s answer is named, value by
+  value, in `test/B-live/types.spec.ts`'s `PENDING_UPSTREAM` - six of 64, four of them only
+  `JSON.stringify` - and each one fails there the day upstream closes it.
 - `result.ts` - `rows` and `rowCount` are **own properties**, because TypeORM reads them through
   `hasOwnProperty`. A class with accessors would make every query silently return nothing.
 - `config.ts` - option translation. Two traps: `{ connectionString }` is not a PostgreJS option and
@@ -231,6 +232,17 @@ option priced, and it is yours to make.
 
 Inherited from `../postgrejs`; they apply from the first commit.
 
+- **No fixups here. A gap in PostgreJS is reported, not worked around.** When something this
+  adapter needs is missing, wrong or slower in `postgrejs`, do not patch around it in this package:
+  no post-decode value rewriting, no shim, no vendored parser, no `pg`-compatibility table, no
+  monkey-patching of the client, no "temporary" branch written to suit the behaviour as it is
+  today. Stop there and write the finding up as a task file in `../postgrejs/.claude/<short-name>.md`
+  - what was asked of the client, what it answered, what it should answer, and the smallest
+  reproduction that shows the difference. That repo's own session picks it up and fixes it at the
+  source. Otherwise every adapter ends up carrying its own copy of the same correction, and the
+  client's behaviour gets defined by whichever adapter last worked around it. A workaround is
+  allowed only when the user is asked for one and says yes; it then carries a comment naming the
+  task file it waits on, so it can be removed when the fix lands.
 - **Do not sign commits or pull requests on the assistant's behalf** - no `Co-Authored-By: Claude`
   trailer, no "Generated with Claude Code" line.
 - Run `git status` before staging. Commit only the files the change is about.

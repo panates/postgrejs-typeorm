@@ -300,7 +300,7 @@ export class PgClient extends EventEmitter {
         ...opts,
         params: toBindParams(params, o),
       });
-      return toPgResult(r, o.decoding === 'pg');
+      return toPgResult(r);
     } catch (e: any) {
       // `pg` sends a parameterless statement over the SIMPLE protocol, which
       // allows several commands in one string and answers with one result per
@@ -348,8 +348,8 @@ export class PgClient extends EventEmitter {
       // One command in, one result out - `pg` unwraps that case and returns
       // an array only when there really were several.
       return results.length === 1
-        ? toPgResult(results[0], o.decoding === 'pg')
-        : toPgResults(results, o.decoding === 'pg');
+        ? toPgResult(results[0])
+        : toPgResults(results);
     } catch (e) {
       throw o.normalizeErrors ? normalizeError(e) : e;
     }

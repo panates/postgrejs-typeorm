@@ -1,10 +1,8 @@
 import assert from 'node:assert';
 import pgUtils from 'pg/lib/utils.js';
-import { DataTypeOIDs } from 'postgrejs';
 import { prepareValue } from '../../src/prepare-value.js';
 import { toPgResult } from '../../src/result.js';
 import { isSubmittable, streamFromSubmittable } from '../../src/stream.js';
-import { fixupFor } from '../../src/value-shapes.js';
 
 const pgPrepare = (pgUtils as any).prepareValue as (v: any) => any;
 
@@ -57,54 +55,6 @@ describe('edge branches', () => {
       const r = toPgResult({ rows: [], fields: [] } as any, true);
       assert.strictEqual(r.command, undefined);
       assert.strictEqual(r.commandTag, undefined);
-    });
-  });
-
-  describe('value fixups over arrays containing nulls', () => {
-    // Every array fixup maps element by element and has to pass a null
-    // through untouched - `pg` keeps the hole, and turning it into a
-    // `PostgresInterval` of nothing or a `{x: undefined}` would be worse
-    // than useless.
-    const apply = (oid: number, value: any) => fixupFor(oid)!(value);
-
-    it('keeps a null inside an interval array', () => {
-      const out = apply(DataTypeOIDs._interval, [null, '1 day']);
-      assert.strictEqual(out[0], null);
-      assert.strictEqual(out[1].days, 1);
-    });
-
-    it('keeps a null inside a point array', () => {
-      const out = apply(DataTypeOIDs._point, [null, { x: 1, y: 2 }]);
-      assert.strictEqual(out[0], null);
-      assert.deepStrictEqual({ ...out[1] }, { x: 1, y: 2 });
-    });
-
-    it('keeps a null inside a numeric array', () => {
-      assert.deepStrictEqual(apply(DataTypeOIDs._numeric, [null, '2.5']), [
-        null,
-        2.5,
-      ]);
-    });
-
-    it('passes a numeric[] value that is not an array straight through', () => {
-      // `fetchAsString` is what makes the elements arrive as strings; a
-      // caller in native decoding never reaches this fixup at all, and a
-      // caller who named the array OID gets the literal, which must not be
-      // mapped character by character.
-      assert.strictEqual(apply(DataTypeOIDs._numeric, '{1.5}'), '{1.5}');
-    });
-
-    it('has no fixup for a column whose type is unknown', () => {
-      assert.strictEqual(fixupFor(undefined), undefined);
-      assert.strictEqual(fixupFor(DataTypeOIDs.int4), undefined);
-    });
-
-    it('needs none for int8[] or money[]', () => {
-      // Both had one until `fetchAsString` learned to name an array column
-      // by its element type. Asserted rather than just deleted, because a
-      // fixup reappearing here would mean that behaviour regressed.
-      assert.strictEqual(fixupFor(DataTypeOIDs._int8), undefined);
-      assert.strictEqual(fixupFor(DataTypeOIDs._money), undefined);
     });
   });
 

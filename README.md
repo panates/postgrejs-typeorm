@@ -73,7 +73,12 @@ running all of A and then all of B measures the page cache and the JIT rather th
 numbers above are Node 24, PostgreSQL 18.4, `pg` 8.23.0, TypeORM 1.1.1, on an M1 Pro against a local
 server. **Over a real network the share of time spent decoding is smaller, so expect less.**
 
-### Your rows keep their `pg` values, exactly
+### Your rows keep their `pg` values
+
+Zero runtime dependencies, and **nothing is rewritten after decoding**. There is no fixup table
+translating PostgreJS's values into `pg`'s behind your back: what the client decodes is what you
+get, and where that is not yet `pg`'s answer it is fixed in the client rather than papered over
+here. The short list of what is still open is below.
 
 The facade's contract is that code written against `pg` sees what it expects. `numeric` and `int8`
 stay strings, `interval` is a `PostgresInterval`, `point` is `{x, y}`, ranges are strings - `pg`'s
@@ -125,9 +130,12 @@ Nothing hidden, so here is the whole list.
   different implementation with a different bug surface. Everything below about differential
   testing exists because of that, not in spite of it - and most of what it has caught so far was in
   the facade rather than in PostgreJS.
-- **One small dependency**, `postgres-interval` - the exact one `pg` uses through `pg-types`, for
-  the one value whose shape has to be identical rather than approximate. It goes once PostgreJS
-  can produce that shape itself, which is where the work belongs.
+- **A handful of values still serialise differently.** `interval`, `point` and `circle` come back
+  with the same fields under the same names as `pg`'s - `v.x`, `{...v}` and `Object.keys(v)` all
+  agree - but `JSON.stringify` gives the string PostgreSQL printed rather than the object, because
+  PostgreJS's classes carry their own `toJSON`. An `interval` also carries its zero fields where
+  `pg` omits them. Named value by value in `test/B-live/types.spec.ts` and being closed in
+  PostgreJS, which is where the decoding belongs.
 - **`pg-query-stream`**, but only if you call `QueryRunner.stream()`. TypeORM loads it itself.
 - **Not a universal `pg` replacement.** The 18 members TypeORM uses are covered and so is knex's
   entry point; Sequelize wants a parser-function registry PostgreJS has no equivalent of, and

@@ -29,6 +29,12 @@ const RANGE_OIDS: number[] = [
  * catalog - see `doc/DRIVER-DESIGN.md` §6. Two things about the list are
  * easy to get wrong:
  *
+ * - `interval` is **not** here either, though `pg`'s value for it is an
+ *   object and PostgreJS's is an `Interval`. Asking for text would hand back
+ *   a bare string, which is further from `pg` than the class is - the class
+ *   carries the same seven fields under the same names. What is left between
+ *   them is `toJSON` and `pg`'s sparseness, and that is a question for the
+ *   decoder: `../postgrejs/.claude/pg-compatible-decoding.md`.
  * - `date`, `timestamp`, `timestamptz` and their array forms are **not**
  *   here. `pg` parses those into `Date` objects and PostgreJS returns the
  *   identical `Date`; asking for text would create a divergence rather than
@@ -44,7 +50,6 @@ export const FETCH_AS_STRING_OIDS: number[] = [
   DataTypeOIDs.int8,
   DataTypeOIDs.numeric,
   DataTypeOIDs.time,
-  DataTypeOIDs.interval,
   // `pg-types` registers no parser for `money` at all, so `pg` hands back
   // the server's own text - symbol, grouping and the scale `lc_monetary`
   // decides: `$99,999,999,999,999.99`. PostgreJS gained a decoder for it

@@ -98,8 +98,5 @@
   ],
   "publishConfig": {
     "access": "public"
-  },
-  "dependencies": {
-    "postgres-interval": "^1.2.0"
   }
 }

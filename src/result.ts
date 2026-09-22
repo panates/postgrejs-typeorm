@@ -1,5 +1,4 @@
 import type { FieldInfo, QueryResult } from 'postgrejs';
-import { fixupFor } from './value-shapes.js';
 
 /** A `pg` result field. */
 export interface PgField {
@@ -62,42 +61,15 @@ function toPgFields(fields: readonly FieldInfo[]): PgField[] {
  *   than an instance of anything.
  * - **`rowCount` is `null` for a statement whose command tag carries no
  *   count**, not 0 - see the comment on it below.
+ *
+ * Nothing is rewritten here. This reshapes the result object and hands the
+ * values through exactly as PostgreJS decoded them: whatever `pg` answers
+ * that PostgreJS does not is a question for the decoder, and is fixed there.
+ * `../postgrejs/.claude/pg-compatible-decoding.md` is what is still open.
  */
-export function toPgResult<R = any>(
-  r: QueryResult,
-  applyFixups: boolean,
-): PgResult<R> {
+export function toPgResult<R = any>(r: QueryResult): PgResult<R> {
   const fields = r.fields ?? [];
   const rows = (r.rows ?? []) as R[];
-
-  if (applyFixups && rows.length && r.rowType === 'object') {
-    const l = fields.length;
-    let i: number;
-    // Built once for the whole result rather than per row: a query with no
-    // column needing one pays a single pass over `fields`.
-    let fixers: (ReturnType<typeof fixupFor> | undefined)[] | undefined;
-    for (i = 0; i < l; i++) {
-      const fn = fixupFor(fields[i].dataTypeId);
-      if (!fn) continue;
-      if (!fixers) fixers = new Array(l);
-      fixers[i] = fn;
-    }
-    if (fixers) {
-      const rowCount = rows.length;
-      let j: number;
-      let name: string;
-      let row: any;
-      for (i = 0; i < l; i++) {
-        const fn = fixers[i];
-        if (!fn) continue;
-        name = fields[i].fieldName;
-        for (j = 0; j < rowCount; j++) {
-          row = rows[j];
-          if (row[name] != null) row[name] = fn(row[name]);
-        }
-      }
-    }
-  }
 
   return {
     command: r.command ? r.command.split(' ')[0] : undefined,
@@ -125,13 +97,10 @@ export function toPgResult<R = any>(
  * A multi-statement result, which `pg` returns as a **bare array** of results
  * rather than as one object - see `PgClient` for why this path exists at all.
  */
-export function toPgResults(
-  results: readonly QueryResult[],
-  applyFixups: boolean,
-): PgResult[] {
+export function toPgResults(results: readonly QueryResult[]): PgResult[] {
   const l = results.length;
   const out = new Array<PgResult>(l);
   let i: number;
-  for (i = 0; i < l; i++) out[i] = toPgResult(results[i], applyFixups);
+  for (i = 0; i < l; i++) out[i] = toPgResult(results[i]);
   return out;
 }
