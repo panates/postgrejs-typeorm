@@ -77,12 +77,11 @@ Pro against a local server. **Over a real network the share of time spent decodi
 
 Zero runtime dependencies, and **nothing is rewritten after decoding**. There is no fixup table
 translating PostgreJS's values into `pg`'s behind your back: what the client decodes is what you
-get, and where that is not yet `pg`'s answer it is fixed in the client rather than papered over
-here. The short list of what is still open is below.
+get, because where the two used to differ the client was changed rather than papered over here.
 
-The facade's contract is that code written against `pg` sees what it expects. `numeric` and `int8`
-stay strings, `interval` is a `PostgresInterval`, `point` is `{x, y}`, ranges are strings - `pg`'s
-answers, not PostgreJS's richer ones. Nothing in your application has to learn a new type.
+The contract is that code written against `pg` sees what it expects. `numeric` and `int8` stay
+strings, `money` keeps the server's `$12.34`, ranges are strings, dates are `Date`s - `pg`'s
+answers. Nothing in your application has to learn a new type.
 
 This is not a claim, it is the test suite: a **64-type decoding matrix** and a **32-case parameter
 matrix** run against a live server with `pg` as the live oracle rather than a table of expected
@@ -105,6 +104,26 @@ await client.query(`select '2024-03-05'::date as d, '2024-03-05 06:07'::timestam
 nowhere else to go. The binary format carries no formatting at all, so the facade is simply immune.
 `test/B-live/date-style.spec.ts` holds this across every style and field order.
 
+### Your values can go back the way they came
+
+`interval`, `point` and `circle` arrive as PostgreJS classes. They read exactly like `pg`'s objects -
+same keys, same values, same `JSON.stringify` - and they can do one thing more:
+
+```ts
+const { rows } = await client.query(`select '(1,2)'::point as p`);
+await client.query('insert into shapes (p) values ($1)', [rows[0].p]); // writes itself back
+```
+
+Through `pg` that second call fails with `22P02`: its plain object has no way to render itself into
+a `point` again, so a value you just read is not a value you can pass on.
+
+### One option, and it has not moved since 2021
+
+`driver` is TypeORM's own option rather than a plugin API this package invented, and the surface
+behind it is **18 members** - unchanged from TypeORM 0.2.39, November 2021, through 1.1.1 today. The
+same facade was run against 0.3.31 and 1.1.1 with identical results. A seam that small and that
+still is one you can upgrade TypeORM across without thinking about it.
+
 ### And PostgreJS's own types are one option away
 
 If you know the code reading your rows, take the richer values instead - `Interval`, `Range`,
@@ -122,46 +141,22 @@ new DataSource({
 Behind PgBouncer in transaction pooling mode, the same place takes `{ postgrejs: { prepare: false } }`.
 The full list is `PgjsFacadeOptions` in [`src/config.ts`](src/config.ts).
 
-## What it costs you
-
-Nothing hidden, so here is the whole list.
-
-- **A less-travelled client.** `pg` is the most-downloaded package on npm and PostgreJS is a
-  different implementation with a different bug surface. Everything below about differential
-  testing exists because of that, not in spite of it - and most of what it has caught so far was in
-  the facade rather than in PostgreJS.
-- **Three types come back as a class, not a plain object.** `interval`, `point` and `circle` are
-  PostgreJS classes where `pg` gives `{...}`. Everything you read agrees - same keys, same values,
-  same `JSON.stringify` - and the class adds `toPostgres()`, so you can pass one straight back as a
-  parameter. `pg`'s own object cannot: it fails with `22P02`.
-- **`pg-query-stream`**, but only if you call `QueryRunner.stream()`. TypeORM loads it itself.
-- **Not a universal `pg` replacement.** The 18 members TypeORM uses are covered and so is knex's
-  entry point; Sequelize wants a parser-function registry PostgreJS has no equivalent of, and
-  pg-promise reaches into `pg`'s private protocol object. See `CLAUDE.md` for which is which.
-
-## Why a facade rather than a driver
-
-TypeORM does not take a dialect the way Kysely and Drizzle do, and a custom TypeORM `Driver` class
-cannot be registered at all - `DriverFactory` is a closed `switch`. The only seam is `driver?: any`.
-So the job is not "implement TypeORM's interface" but "be the `pg` module".
-
-That surface turns out to be small and stable: **18 members**, all public, unchanged since TypeORM
-0.2.39 (2021) through 1.1.1 today. It is counted in
-[`doc/DRIVER-DESIGN.md`](doc/DRIVER-DESIGN.md) §2, which is also where every decision in `src/` is
-argued with the measurement behind it.
-
 ## How far it is tested
 
 - **806 of 806** on TypeORM's own functional suite, across 127 files - with a `pg` control run over
   the same files, on the same server, in the same invocation.
-- **266 tests** of its own, at 98.9% coverage: unit tests, the live matrices above, and 20 TypeORM
+- **275 tests** of its own, at 99.9% coverage: unit tests, the live matrices above, and 20 TypeORM
   programs run through both drivers and deep-compared.
 
-The differential tests are the ones that earn their keep. They found what nobody thought to assert:
-that TypeORM reads `rows` and `rowCount` through `hasOwnProperty`, so a class with accessors would
-make every query silently return nothing; that `postgres-interval`'s major version changes which
-fields an interval carries; and that TypeORM's own catalog query has no `ORDER BY`, so
+Running `pg` as a live control, rather than against a table of expected values, is what makes those
+numbers mean something - and it is what found the things nobody thought to assert. That TypeORM
+reads `rows` and `rowCount` through `hasOwnProperty`, so a class with accessors would make every
+query silently return nothing. That `money` has no parser in `pg` at all, so the day PostgreJS
+gained one the answers moved. That TypeORM's own catalog query has no `ORDER BY`, so
 `getTable().columns` comes back in a plan-dependent order for *both* drivers.
+
+Each of those became a fix in PostgreJS or in this package on the day it was measured, which is why
+there is no compatibility code here to read around.
 
 ```bash
 npm test                      # unit, live and differential - needs a server on PGHOST
@@ -180,7 +175,10 @@ between runs, and only a control measured in the same invocation is worth compar
 - Node.js >= 22
 - PostgreJS >= 3.10.0
 - TypeORM >= 0.3.0 < 2 (optional peer - the facade does not import TypeORM)
-- `pg-query-stream`, only for `QueryRunner.stream()`
+- `pg-query-stream`, only for `QueryRunner.stream()` - TypeORM loads it itself
+
+Built for TypeORM, and knex's entry point is covered too: `driver.Client`, the query-config call
+form and `pg-query-stream` all answer. `CLAUDE.md` has what the 18 members reach.
 
 ## License
 
