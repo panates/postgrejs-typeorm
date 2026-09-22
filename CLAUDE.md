@@ -111,10 +111,12 @@ that was expensive to arrive at, with the reason next to it.
 - `constants.ts` - the `fetchAsString` OID list. **An array OID there behaves differently from a
   scalar one** - it makes the whole literal come back as one string - so it belongs there only where
   `pg` also returns a string. That is the geometric family except `point[]`.
-  There is **no `value-shapes.ts` and no runtime dependency**. Both are gone: the facade hands every
-  value through exactly as PostgreJS decoded it. What is still not `pg`'s answer is named, value by
-  value, in `test/B-live/types.spec.ts`'s `PENDING_UPSTREAM` - six of 64, four of them only
-  `JSON.stringify` - and each one fails there the day upstream closes it.
+  There is **no fixup table and no runtime dependency**. The facade hands every value through
+  exactly as PostgreJS decoded it, and the 64-type matrix is 64/64 on values: what a caller reads -
+  own keys, their values, `JSON.stringify` - agrees with `pg` everywhere. Three types come back as
+  PostgreJS classes where `pg` gives a plain object, and `types.spec.ts` asserts that as the
+  superset it is rather than dropping it: the class also answers `toPostgres()`, so a `point` read
+  here goes back to the server as a parameter where `pg`'s own object fails 22P02.
 - `result.ts` - `rows` and `rowCount` are **own properties**, because TypeORM reads them through
   `hasOwnProperty`. A class with accessors would make every query silently return nothing.
 - `config.ts` - option translation. Two traps: `{ connectionString }` is not a PostgreJS option and

@@ -130,12 +130,10 @@ Nothing hidden, so here is the whole list.
   different implementation with a different bug surface. Everything below about differential
   testing exists because of that, not in spite of it - and most of what it has caught so far was in
   the facade rather than in PostgreJS.
-- **A handful of values still serialise differently.** `interval`, `point` and `circle` come back
-  with the same fields under the same names as `pg`'s - `v.x`, `{...v}` and `Object.keys(v)` all
-  agree - but `JSON.stringify` gives the string PostgreSQL printed rather than the object, because
-  PostgreJS's classes carry their own `toJSON`. An `interval` also carries its zero fields where
-  `pg` omits them. Named value by value in `test/B-live/types.spec.ts` and being closed in
-  PostgreJS, which is where the decoding belongs.
+- **Three types come back as a class, not a plain object.** `interval`, `point` and `circle` are
+  PostgreJS classes where `pg` gives `{...}`. Everything you read agrees - same keys, same values,
+  same `JSON.stringify` - and the class adds `toPostgres()`, so you can pass one straight back as a
+  parameter. `pg`'s own object cannot: it fails with `22P02`.
 - **`pg-query-stream`**, but only if you call `QueryRunner.stream()`. TypeORM loads it itself.
 - **Not a universal `pg` replacement.** The 18 members TypeORM uses are covered and so is knex's
   entry point; Sequelize wants a parser-function registry PostgreJS has no equivalent of, and

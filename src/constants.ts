@@ -1,4 +1,4 @@
-import { DataTypeOIDs } from 'postgrejs';
+import { DataTypeOIDs, type FetchAsStringItem } from 'postgrejs';
 
 /**
  * The OID `pg` declares for every parameter: unspecified, so PostgreSQL
@@ -40,15 +40,16 @@ const RANGE_OIDS: number[] = [
  *   identical `Date`; asking for text would create a divergence rather than
  *   remove one. This is where `postgrejs-drizzle`'s list differs and must
  *   not be copied - its driver overrides pg's parsers to get raw strings.
- * - `_numeric` is the awkward one. `pg`'s array parser runs `parseFloat` per
- *   element even though scalar `numeric` stays a string - an inconsistency of
- *   `pg`'s, not a principle. Naming `numeric` here now reaches `numeric[]`
- *   too, which is the more defensible behaviour and the wrong one for a
- *   facade, so the elements are turned back into numbers afterwards.
+ * - `numeric` is the one entry that is not a bare OID. `pg`'s array parser
+ *   runs `parseFloat` per element even though scalar `numeric` stays a
+ *   string - an inconsistency of `pg`'s, not a principle - and naming an OID
+ *   on its own reaches that type's array columns too. `{ arrays: false }` is
+ *   how the two are said separately; `numeric[]` already decodes to numbers
+ *   here, so it wants leaving alone.
  */
-export const FETCH_AS_STRING_OIDS: number[] = [
+export const FETCH_AS_STRING_OIDS: FetchAsStringItem[] = [
   DataTypeOIDs.int8,
-  DataTypeOIDs.numeric,
+  { oid: DataTypeOIDs.numeric, arrays: false },
   DataTypeOIDs.time,
   // `pg-types` registers no parser for `money` at all, so `pg` hands back
   // the server's own text - symbol, grouping and the scale `lc_monetary`
@@ -83,7 +84,7 @@ export const FETCH_AS_STRING_OIDS: number[] = [
   // array OIDs above still mean "the whole literal, verbatim", so the two
   // asks stay distinguishable by which OID is named.
   ...RANGE_OIDS,
-].filter(oid => typeof oid === 'number');
+].filter(o => typeof o === 'number' || typeof o?.oid === 'number');
 
 /** What `pg`'s pool defaults to when `max` is not given. */
 export const DEFAULT_POOL_MAX = 10;

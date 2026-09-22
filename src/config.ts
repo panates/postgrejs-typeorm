@@ -1,4 +1,4 @@
-import type { PoolConfiguration } from 'postgrejs';
+import type { FetchAsStringItem, PoolConfiguration } from 'postgrejs';
 import { DEFAULT_POOL_MAX } from './constants.js';
 
 /**
@@ -50,8 +50,12 @@ export interface PgjsFacadeOptions {
   /**
    * Additional OIDs to ask the server for as text, appended to the list the
    * `'pg'` decoding mode already uses. Ignored when `decoding` is `'native'`.
+   *
+   * An entry may be an OID or PostgreJS's `{ oid, arrays }` selector - naming
+   * an OID on its own also reaches columns of arrays of it, and
+   * `{ arrays: false }` asks for only the scalar.
    */
-  fetchAsString?: number[];
+  fetchAsString?: FetchAsStringItem[];
 
   /**
    * PostgreJS caches prepared statements per connection from the second use
@@ -115,7 +119,7 @@ export interface ResolvedFacadeOptions extends Required<
   Omit<PgjsFacadeOptions, 'fetchAsString' | 'prepare' | 'decoding'>
 > {
   decoding: 'pg' | 'native';
-  fetchAsString?: number[];
+  fetchAsString?: FetchAsStringItem[];
   prepare?: boolean;
 }
 

@@ -50,35 +50,6 @@ const Child = new EntitySchema<any>({
   },
 });
 
-/**
- * The one difference this comparison still allows, and why.
- *
- * The facade rewrites nothing after decoding, so an `interval` column arrives
- * as PostgreJS's `Interval` - the same seven fields under the same names as
- * `pg`'s object, but with a `toJSON` that returns the string the server
- * printed. `normalize()` goes through `JSON.stringify`, so that is exactly
- * where it shows: `span` is `'1 day 02:00:00'` here and `{days: 1, hours: 2}`
- * there.
- *
- * This is the concrete cost of the open upstream item - it reaches a real
- * TypeORM program, not just a type matrix - and it is tracked in
- * `../postgrejs/.claude/pg-compatible-decoding.md`. Dropped from the
- * comparison rather than skipped, with the test below pinning that it is this
- * difference and no other.
- */
-const PENDING_COLUMNS = ['span'];
-
-const withoutPendingGaps = (v: any): any => {
-  if (Array.isArray(v)) return v.map(withoutPendingGaps);
-  if (v && typeof v === 'object') {
-    const out: any = {};
-    for (const k of Object.keys(v))
-      if (!PENDING_COLUMNS.includes(k)) out[k] = withoutPendingGaps(v[k]);
-    return out;
-  }
-  return v;
-};
-
 type Case = (ds: DataSource) => Promise<any>;
 
 const CASES: Record<string, Case> = {
@@ -415,37 +386,7 @@ describe('C-differential: the same TypeORM program through pg and through us', f
 
   for (const name of Object.keys(CASES)) {
     it(name, () => {
-      assert.deepStrictEqual(
-        withoutPendingGaps(normalize(actual[name])),
-        withoutPendingGaps(normalize(control[name])),
-      );
+      assert.deepStrictEqual(normalize(actual[name]), normalize(control[name]));
     });
   }
-
-  it('the pending gap is the interval one, and only that', () => {
-    // Guards the allowance above. It reads the **normalized** values, because
-    // that is where the difference lives: the raw value is an object on both
-    // sides and its fields already agree - only `JSON.stringify` parts them.
-    // If that closes upstream, or if a second column starts diverging, this
-    // fails instead of the allowance absorbing it.
-    const ours: any = normalize(actual['insert and find'])?.value?.found;
-    const theirs: any = normalize(control['insert and find'])?.value?.found;
-    assert.strictEqual(
-      ours.span,
-      '1 day 02:00:00',
-      "PostgreJS's Interval serialises to the string the server printed",
-    );
-    assert.deepStrictEqual(
-      theirs.span,
-      { days: 1, hours: 2 },
-      'pg is sparse, and this is the shape to arrive at',
-    );
-    const strip = (o: any) =>
-      Object.fromEntries(Object.entries(o).filter(([k]) => k !== 'span'));
-    assert.deepStrictEqual(
-      strip(ours),
-      strip(theirs),
-      'every other column has to agree exactly',
-    );
-  });
 });

@@ -81,48 +81,6 @@ const TYPES: [string, string][] = [
   ['null', `null::int4`],
 ];
 
-/**
- * What is still open upstream, named value by value.
- *
- * The facade rewrites nothing after decoding - no fixup table, no `pg`
- * dependency - so what PostgreJS decodes is what a caller gets. These six are
- * where that is not yet `pg`'s answer, and each is listed with the exact
- * difference so this file fails when one is closed. The tracking issue is
- * `../postgrejs/.claude/pg-compatible-decoding.md`; the two kinds are:
- *
- * - **`json`** - the value's own keys and their values match `pg` exactly and
- *   only `JSON.stringify` differs, because PostgreJS's classes carry a
- *   `toJSON` returning the literal the server printed. `{...v}`, `v.x` and
- *   `Object.keys(v)` all agree today.
- * - **`shape`** - a real difference in what is there.
- */
-const PENDING_UPSTREAM: Record<string, string> = {
-  // toJSON gives the literal where pg serialises the object.
-  interval: 'json',
-  point: 'json',
-  circle: 'json',
-  _point: 'json',
-  // pg omits an interval's zero fields; PostgreJS carries all seven. Only
-  // visible on a value that HAS a zero field, which is why the scalar
-  // `interval` row above is a `json` and this one is not.
-  _interval: 'shape',
-  // Scalar `numeric` has to be text to keep its precision, and naming it
-  // reaches `numeric[]` too, where `pg` runs parseFloat per element. Needs a
-  // way to name a scalar without its array.
-  _numeric: 'shape',
-};
-
-const describeGap = (actual: any, expected: any): string => {
-  const same = (a: any, b: any): boolean =>
-    Array.isArray(a) && Array.isArray(b)
-      ? a.length === b.length && a.every((x, i) => same(x, b[i]))
-      : a && b && typeof a === 'object' && typeof b === 'object'
-        ? JSON.stringify({ ...a }) === JSON.stringify({ ...b })
-        : Object.is(a, b);
-  if (!same(actual, expected)) return 'shape';
-  return JSON.stringify(actual) === JSON.stringify(expected) ? 'none' : 'json';
-};
-
 describe('B-live: decoded values match pg, type for type', () => {
   let control: pg.Pool;
   let facade: PgPool;
@@ -148,27 +106,60 @@ describe('B-live: decoded values match pg, type for type', () => {
   for (const [label, expr] of TYPES) {
     it(label, async () => {
       const sql = `select ${expr} as v`;
-      const expected = (await control.query(sql)).rows[0].v;
-      const actual = (await facade.query(sql)).rows[0].v;
-      const pending = PENDING_UPSTREAM[label];
-      if (!pending) {
-        assert.strictEqual(
-          describeValue(actual),
-          describeValue(expected),
-          `${label}: ${expr}`,
-        );
-        return;
-      }
-      // A known divergence, asserted as the divergence it is rather than
-      // skipped - so it fails here the day upstream closes it and this entry
-      // has to go, instead of passing quietly either way.
-      assert.strictEqual(
-        describeGap(actual, expected),
-        pending,
-        `${label}: ${expr} - see ../postgrejs/.claude/pg-compatible-decoding.md`,
-      );
+      const expected = describeValue((await control.query(sql)).rows[0].v);
+      const actual = describeValue((await facade.query(sql)).rows[0].v);
+      assert.strictEqual(actual, expected, `${label}: ${expr}`);
     });
   }
+
+  describe('where the class differs, it is a superset', () => {
+    // `describeValue` compares values rather than constructor names, and
+    // this is what keeps that from hiding anything. `interval`, `point` and
+    // `circle` come back as PostgreJS classes where `pg` gives a plain
+    // object or its own `PostgresInterval`. Everything a caller reads
+    // agrees - own keys, their values, `JSON.stringify` - and the class adds
+    // `toPostgres()`, which is what lets the value go back to the server.
+    // `pg`'s own object cannot: it fails 22P02.
+    const CASES: [string, string][] = [
+      ['point', `'(1,2)'::point`],
+      ['circle', `'<(1,2),3>'::circle`],
+      ['interval', `'1 day 2 hours'::interval`],
+    ];
+
+    for (const [label, expr] of CASES) {
+      it(`${label} reads the same and writes back, where pg's cannot`, async () => {
+        const sql = `select ${expr} as v`;
+        const theirs = (await control.query(sql)).rows[0].v;
+        const ours = (await facade.query(sql)).rows[0].v;
+
+        assert.deepStrictEqual(
+          Object.keys(ours).sort(),
+          Object.keys(theirs).sort(),
+        );
+        assert.deepStrictEqual({ ...ours }, { ...theirs });
+        assert.strictEqual(JSON.stringify(ours), JSON.stringify(theirs));
+
+        assert.strictEqual(
+          typeof ours.toPostgres,
+          'function',
+          'the class has to be able to write itself back',
+        );
+        const back = await facade.query(`select $1::text as v`, [ours]);
+        assert.strictEqual(typeof back.rows[0].v, 'string');
+      });
+    }
+
+    it("pg's own point cannot be sent back, which is why the class is kept", async () => {
+      // Not a facade assertion - a note about what the comparison above is
+      // choosing between, pinned so it is not taken on trust.
+      const theirs = (await control.query(`select '(1,2)'::point as v`)).rows[0]
+        .v;
+      await assert.rejects(
+        () => control.query('select $1::point as v', [theirs]),
+        (e: any) => e.code === '22P02',
+      );
+    });
+  });
 
   it('keeps PostgreJS decoding when asked for it', async () => {
     // The escape hatch, and the reason it is not the default: what comes back
