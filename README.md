@@ -26,9 +26,6 @@ That is the entire migration. `driver` is TypeORM's own option - its doc comment
 to `require("pg")`"* - and this package is a drop-in for that default: same members, same values
 back, different client underneath.
 
-> **Not released yet.** `src/` is written and tested; the decisions still open are at the end of
-> [`doc/DRIVER-DESIGN.md`](doc/DRIVER-DESIGN.md).
-
 ## What you get
 
 ### Your reads get faster, and you change nothing to get it
