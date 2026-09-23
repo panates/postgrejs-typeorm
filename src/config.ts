@@ -18,8 +18,10 @@ export interface PgjsFacadeOptions {
    * What values come back as.
    *
    * - `'pg'` (the default) - what `pg` returns, type for type. `numeric` and
-   *   `int8` are strings, `interval` is a `PostgresInterval`-shaped object,
-   *   `point` is `{x, y}`, ranges are strings.
+   *   `int8` are strings, `money` keeps the server's own `$12.34`, ranges are
+   *   strings, dates are `Date`s. `interval`, `point` and `circle` are
+   *   PostgreJS classes carrying `pg`'s own keys and values - see the README
+   *   for why that is a superset rather than a divergence.
    * - `'native'` - PostgreJS's own decoding, which is richer and is the
    *   reason to use PostgreJS at all: a `Numeric` that keeps every digit, a
    *   `BigInt` past 2^53, typed geometric and `Range` classes.

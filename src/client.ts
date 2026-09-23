@@ -249,10 +249,12 @@ export class PgClient extends EventEmitter {
    * ```
    *
    * Nobody migrating from `pg` loses the 10x by serialising, because `pg`
-   * never offered it - it serialises, and deprecates concurrent `query()`
-   * outright ("will be removed in pg@9.0"). Anyone who wants PostgreJS's
-   * concurrency has `client.connection`, which is the real thing and is not
-   * queued.
+   * never offered it: every `query()` goes on a per-client queue and the next
+   * starts only when the previous has settled. pg@9.0 removes the last public
+   * view of that queue - `Client.activeQuery` and `Client.queryQueue`, both
+   * behind a deprecation notice in `lib/client.js` - not the queue itself, so
+   * the serialising is what stays. Anyone who wants PostgreJS's concurrency
+   * has `client.connection`, which is the real thing and is not queued.
    *
    * Streams are deliberately not queued: a cursor is read lazily and holding
    * the queue open for its lifetime would deadlock every statement behind it.

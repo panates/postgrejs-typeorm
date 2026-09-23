@@ -865,9 +865,10 @@ already identical; it is only statements that depend on what a previous one left
 
 **The facade now serialises per client**, which is what `pg` does. Pipelining is worth **10x** on one
 connection - 500 queries in 12ms against 120ms awaited, and `pg` itself takes 142ms awaited - so this
-is giving up something real. It is still right: `pg` has never offered that path, deprecates
-concurrent `query()` outright ("will be removed in pg@9.0"), and so no consumer written against `pg`
-can be relying on it. Anyone who wants PostgreJS's concurrency has `client.connection`, which is the
+is giving up something real. It is still right: `pg` has never offered that path - every `query()`
+goes on a per-client queue and the next starts only when the previous has settled - so no consumer
+written against `pg` can be relying on it. (What pg@9.0 deprecates is the public view of that queue,
+`Client.activeQuery` and `Client.queryQueue`, not the queueing.) Anyone who wants PostgreJS's concurrency has `client.connection`, which is the
 real `Connection` and is not queued. Streams are deliberately left out of the queue - a cursor is
 read lazily, and holding the queue for its lifetime would deadlock everything behind it.
 

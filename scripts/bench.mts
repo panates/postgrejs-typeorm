@@ -24,6 +24,7 @@
  */
 import 'reflect-metadata';
 import { Pool as PgPool } from 'pg';
+import { Connection, DataFormat } from 'postgrejs';
 import { DataSource, EntitySchema } from 'typeorm';
 import * as facade from '../src/index.js';
 
@@ -43,6 +44,34 @@ const median = (a: number[]): number => {
   return s[s.length >> 1];
 };
 
+/**
+ * The odds of winning `wins` of `n` alternated iterations if the two were
+ * equally fast - a two-sided sign test, computed exactly.
+ *
+ * The medians alone are worth less than they look on a shared machine: the
+ * same `pg` baseline drifts between runs. What does not drift is *which* of
+ * the two won each iteration, so that is counted separately. This says the
+ * difference is real; it says nothing about its size, which is what the
+ * median column is for.
+ */
+const signTest = (wins: number, n: number): string => {
+  const k = Math.min(wins, n - wins);
+  // Sum the tail with logs, so a binomial coefficient at n=400 does not
+  // overflow a double.
+  const logFactorial: number[] = [0];
+  for (let i = 1; i <= n; i++)
+    logFactorial[i] = logFactorial[i - 1] + Math.log(i);
+  let tail = 0;
+  for (let i = 0; i <= k; i++)
+    tail += Math.exp(
+      logFactorial[n] - logFactorial[i] - logFactorial[n - i] - n * Math.LN2,
+    );
+  const p = Math.min(1, 2 * tail);
+  if (p > 0.05) return 'not significant';
+  if (p < 1e-18) return '< 1 in 10^18';
+  return `< 1 in 10^${Math.floor(-Math.log10(p))}`;
+};
+
 /** One row per shape, with both drivers alternating call by call. */
 async function compare<T>(
   work: Record<string, (target: T) => Promise<unknown>>,
@@ -60,23 +89,33 @@ async function compare<T>(
     'shape'.padEnd(24),
     'pg'.padStart(9),
     'facade'.padStart(9),
-    'delta'.padStart(9),
+    'delta'.padStart(8),
+    'won'.padStart(9),
+    '  by luck',
   );
   for (const [name, w] of Object.entries(work)) {
+    const n = reps[name];
     const times: Record<string, number[]> = { pg: [], facade: [] };
-    for (let i = 0; i < reps[name]; i++)
+    let wins = 0;
+    for (let i = 0; i < n; i++) {
+      const one: Record<string, number> = {};
       for (const [label, target] of targets) {
         const t = process.hrtime.bigint();
         await w(target);
-        times[label].push(Number(process.hrtime.bigint() - t) / 1e6);
+        one[label] = Number(process.hrtime.bigint() - t) / 1e6;
+        times[label].push(one[label]);
       }
+      if (one.facade < one.pg) wins++;
+    }
     const a = median(times.pg);
     const b = median(times.facade);
     console.log(
       name.padEnd(24),
       a.toFixed(3).padStart(9),
       b.toFixed(3).padStart(9),
-      `${((b / a - 1) * 100).toFixed(1).padStart(8)}%`,
+      `${((b / a - 1) * 100).toFixed(1).padStart(7)}%`,
+      `${wins}/${n}`.padStart(9),
+      '  ' + signTest(wins, n),
     );
   }
 }
@@ -142,11 +181,13 @@ async function rawQueries(): Promise<void> {
   await compare(
     work,
     {
-      'select 10k wide rows': 20,
-      'select 100 rows': 200,
-      'point lookup by id': 400,
-      'count + filter': 60,
-      'insert one row': 400,
+      // Odd counts, and high enough that the sign test can speak: a shape
+      // run 15 times cannot reach significance however lopsided it is.
+      'select 10k wide rows': 61,
+      'select 100 rows': 201,
+      'point lookup by id': 401,
+      'count + filter': 101,
+      'insert one row': 401,
     },
     pools,
   );
@@ -237,17 +278,74 @@ async function throughTypeORM(): Promise<void> {
   await compare(
     work,
     {
-      [`find ${ROWS} entities`]: 15,
-      'find 100 entities': 150,
-      findOneBy: 200,
-      'save one entity': 200,
-      'queryBuilder + where': 80,
+      [`find ${ROWS} entities`]: 61,
+      'find 100 entities': 201,
+      findOneBy: 201,
+      'save one entity': 201,
+      'queryBuilder + where': 101,
     },
     sources,
   );
   for (const [, ds] of sources) await ds.destroy();
 }
 
+/**
+ * Where the difference comes from, one mechanism at a time.
+ *
+ * The two sections above say how much; these say why, by turning a single
+ * thing off and leaving everything else alone. Same alternation, same sign
+ * test - a mechanism that cannot win its own A/B does not belong in the
+ * explanation.
+ */
+async function mechanisms(): Promise<void> {
+  console.log('\n== where it comes from\n');
+
+  // 1. The wire format, isolated at the client rather than through the
+  //    facade: same connection, same SQL, only the format code differs.
+  const binary = new Connection(env);
+  const text = new Connection(env);
+  await binary.connect();
+  await text.connect();
+  const read = (c: Connection, fmt?: DataFormat) => () =>
+    c.query('select * from bench_rows limit 2000', {
+      objectRows: true,
+      columnFormat: fmt,
+    });
+  await compare(
+    { 'binary vs text, 2k rows': (f: () => Promise<unknown>) => f() },
+    { 'binary vs text, 2k rows': 61 },
+    [
+      ['pg', read(text, DataFormat.text)],
+      ['facade', read(binary, DataFormat.binary)],
+    ],
+  );
+  await binary.close();
+  await text.close();
+
+  // 2. The per-connection statement cache, through the facade, which is
+  //    where `prepare: false` is a supported option.
+  const cached = new facade.Pool({ ...env, max: 4 });
+  const uncached = new facade.Pool({
+    ...env,
+    max: 4,
+    postgrejs: { prepare: false },
+  } as any);
+  await compare(
+    {
+      'prepared vs not': (p: any) =>
+        p.query('select * from bench_rows where id = $1', [1234]),
+    },
+    { 'prepared vs not': 401 },
+    [
+      ['pg', uncached],
+      ['facade', cached],
+    ],
+  );
+  await cached.end();
+  await uncached.end();
+}
+
 await seedTable();
 await rawQueries();
 await throughTypeORM();
+await mechanisms();

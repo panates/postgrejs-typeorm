@@ -1,11 +1,22 @@
 # typeorm-postgrejs
 
-**Bring [PostgreJS](https://github.com/panates/postgrejs) to [TypeORM](https://typeorm.io) - by
-changing one line.**
+A `pg`-compatible facade over [PostgreJS](https://github.com/panates/postgrejs), so
+[TypeORM](https://typeorm.io) runs on PostgreJS's wire-protocol client instead of
+[`pg`](https://node-postgres.com).
 
-TypeORM talks to PostgreSQL through [`pg`](https://node-postgres.com). This package is a
-`pg`-compatible facade over PostgreJS, so TypeORM runs on PostgreJS's wire-protocol client instead -
-without touching an entity, a query or a migration.
+## Install
+
+```sh
+npm install typeorm-postgrejs postgrejs
+```
+
+`postgrejs` (>=3.10.0 <4) is a peer dependency; `typeorm` (>=0.3.0 <2) is an optional one, because
+this package never imports TypeORM. Node >=22. There are no runtime dependencies.
+
+## Usage
+
+`driver` is TypeORM's own option - its doc comment reads *"The driver object. This defaults to
+`require("pg")`."* - so this package goes where that default was:
 
 ```ts
 import { DataSource } from 'typeorm';
@@ -18,90 +29,214 @@ export const dataSource = new DataSource({
   username: 'postgres',
   password: 'postgres',
   driver: pgjs, // <- the whole integration
-  entities: [/* ... */],
+  entities: [
+    /* ... */
+  ],
 });
 ```
 
-That is the entire migration. `driver` is TypeORM's own option - its doc comment reads *"defaults
-to `require("pg")`"* - and this package is a drop-in for that default: same members, same values
-back, different client underneath.
+That is the entire migration: no entity, query or migration changes. A connection string and the
+pool options work exactly as they do with `pg`:
 
-## What you get
-
-### Your reads get faster, and you change nothing to get it
-
-`pg` asks PostgreSQL for **everything as text** and parses it in JavaScript. PostgreJS reads the
-binary wire format, where an `int8` is eight bytes rather than a string to scan and a `timestamptz`
-is an integer rather than a date to parse. That difference shows up as soon as rows have to be
-decoded:
-
-```
-== through TypeORM                        pg      facade     delta
-
-find 5000 entities                    16.611      13.868     -16.5%
-find 100 entities                      0.864       0.739     -14.5%
-findOneBy                              0.605       0.547      -9.6%
-queryBuilder + where (500 rows)        2.472       2.152     -12.9%
-save one entity                        0.937       0.977      +4.2%
+```ts
+new DataSource({ type: 'postgres', driver: pgjs, url: 'postgres://user:secret@localhost/mydb' });
+new DataSource({ type: 'postgres', driver: pgjs, extra: { max: 20, idleTimeoutMillis: 30_000 } });
 ```
 
-Milliseconds, median. **Reads land 10-17% faster**; writes are inside the noise and swing either way
-between runs, so read them as "unchanged". The gain scales with how much there is to decode - which
-is the honest way to read the table, and the reason it includes a shape that must *not* move:
+### Options
 
+This package's own options go under `postgrejs` in TypeORM's `extra`, which
+`PostgresDriver.createPool()` merges straight into the object the pool is constructed with:
+
+```ts
+new DataSource({
+  // ...
+  driver: pgjs,
+  extra: { postgrejs: { decoding: 'native' } },
+});
 ```
-== raw pool.query()                       pg      facade     delta
 
-select 100 rows                        0.665       0.567     -14.7%
-count + filter (one row, after a scan) 1.450       1.490      +2.7%
-```
+| option | default | what it does |
+| --- | --- | --- |
+| `decoding` | `'pg'` | `'native'` gives PostgreJS's own richer values instead of `pg`'s - a `Numeric` that keeps every digit, a `BigInt` past 2^53, typed geometric and `Range` classes. Opt in only if you know the code reading those rows: TypeORM has no hydration branch for a `numeric` column, so a `Numeric` reaches the user where a string was expected |
+| `fetchAsString` | - | extra OIDs to ask the server for as text, on top of the list `'pg'` mode already uses. An entry is an OID or `{ oid, arrays: false }`, which asks for a scalar without its array columns |
+| `prepare` | PostgreJS's default | `false` for PgBouncer in transaction pooling mode before 1.21, where a named statement does not survive to the next call. It turns off the largest single speedup this package has - see [Where the speed comes from](#where-the-speed-comes-from) |
+| `normalizeErrors` | `true` | makes a caught error look like `pg`'s: the caret diagram out of `message`, `position` as a string. The structured fields are identical either way |
+| `suppressRedundantPoolError` | `true` | PostgreJS reports a dead pooled connection on the pool *and* rejects the in-flight query; `pg` only rejects the query. This drops the duplicate, so you do not get a `Postgres pool raised an error` warning `pg` never produces |
+| `parseInputDatesAsUTC` | `false` | mirrors `pg`'s `defaults.parseInputDatesAsUTC`: render a `Date` parameter from its UTC fields rather than its local ones |
+| `inferParameterTypes` | `false` | lets PostgreJS declare an OID per parameter from the JS value, instead of sending every parameter unspecified the way `pg` does |
 
-`count` returns a single row after a scan the server dominates. Neither driver can win it, and it
-comes out level - which is what makes the rest of the table worth believing.
+## Why
 
-Measure it yourself, on your own data and your own machine:
+It is a drop-in swap for `pg`: the same `driver` option, the same entities, the same queries. What
+you get for it:
 
-```bash
+- **Faster queries**, measured end to end through a real `DataSource` - reads most of all, writes by
+  a smaller but real margin.
+- **Correct dates on a server whose `DateStyle` is not `ISO`**, where `pg` hands back `null`.
+  Details under [How it differs](#how-it-differs-from-pg).
+- **Checked against TypeORM's own functional suite** - 806 of 806, with `pg` run over the same
+  files on the same server in the same invocation as the control.
+
+| workload | `pg` | `typeorm-postgrejs` | speedup |
+| --- | --- | --- | --- |
+| `findOneBy` | 0.621 ms | 0.530 ms | **1.17x** |
+| `find`, 100 entities | 1.159 ms | 0.982 ms | **1.18x** |
+| `find`, 5000 entities | 24.011 ms | 20.953 ms | **1.15x** |
+| query builder, 500 rows | 4.398 ms | 4.260 ms | **1.03x** |
+| `save` one entity | 1.796 ms | 1.736 ms | **1.03x** |
+| raw: 100 rows | 1.222 ms | 0.977 ms | **1.25x** |
+| raw: primary-key lookup | 0.590 ms | 0.542 ms | **1.09x** |
+| raw: one insert | 0.795 ms | 0.724 ms | **1.10x** |
+
+TypeORM 1.1.1, `pg` 8.23.0, PostgreJS 3.10.0, PostgreSQL 18.4, loopback, Node 24, M1 Pro. Medians;
+[How the numbers were measured](#how-the-numbers-were-measured) says how far each row can be
+trusted.
+
+**Reads gain most, and the gain grows with how many rows come back.** Writes gain a little. Over a
+real network the share of time spent on the client is smaller, so expect less than a loopback
+figure.
+
+## How the numbers were measured
+
+Both drivers run in one process and alternate on every iteration, so neither gets a warmer machine
+than the other. Each figure is the median of 61 to 401 iterations, depending on how expensive the
+shape is.
+
+The medians alone would not be worth much. This was measured on a shared machine and the absolute
+figures drift by more than the differences do - the same `pg` baseline for a primary-key lookup came
+out at 0.590 ms and 0.738 ms in one session. What does not drift is *which* of the two won each
+iteration, so that is counted separately:
+
+| workload | iterations | `typeorm-postgrejs` faster in | odds of that by luck |
+| --- | --- | --- | --- |
+| `findOneBy` | 201 | 166 | < 1 in 10^18 |
+| `find`, 100 entities | 201 | 179 | < 1 in 10^18 |
+| `find`, 5000 entities | 61 | 48 | < 1 in 10^5 |
+| query builder, 500 rows | 101 | 62 | < 1 in 10 |
+| `save` one entity | 201 | 118 | < 1 in 10 |
+| raw: 100 rows | 201 | 166 | < 1 in 10^18 |
+| raw: primary-key lookup | 401 | 269 | < 1 in 10^11 |
+| raw: one insert | 401 | 259 | < 1 in 10^8 |
+| **raw: count over a scan** | **101** | **55** | **not significant** |
+
+That is a sign test - only which driver won counts, and by how much is thrown away, which is what
+makes it survive a noisy machine. Two drivers of equal speed would split the iterations evenly, so
+the last column is the probability of a split that lopsided from a fair coin.
+
+**The last row is the point of the table.** A `count` over a scan returns one row and is dominated
+by the server; neither driver can win it, and it comes out even. It is in the suite so that a run
+where it *does* move can be thrown away - which happened twice while writing this, on a machine
+under load.
+
+Run it yourself:
+
+```sh
 npx tsx scripts/bench.mts
 ```
 
-The script alternates the two drivers **call by call inside one run** and reports medians, because
-running all of A and then all of B measures the page cache and the JIT rather than the driver. The
-numbers above are Node 24, PostgreSQL 18.4, `pg` 8.23.0, PostgreJS 3.10.0, TypeORM 1.1.1, on an M1
-Pro against a local server. **Over a real network the share of time spent decoding is smaller, so expect less.**
+## Where the speed comes from
 
-### Your rows keep their `pg` values
+Two mechanisms were isolated, each by turning one thing off and leaving everything else alone, with
+the same alternation and the same sign test. They do not add up to the totals above and are not
+meant to: what is left is the client's own decoding path, which cannot be switched off to measure.
 
-Zero runtime dependencies, and **nothing is rewritten after decoding**. There is no fixup table
-translating PostgreJS's values into `pg`'s behind your back: what the client decodes is what you
-get, because where the two used to differ the client was changed rather than papered over here.
+### It keeps prepared statements
 
-The contract is that code written against `pg` sees what it expects. `numeric` and `int8` stay
-strings, `money` keeps the server's `$12.34`, ranges are strings, dates are `Date`s - `pg`'s
-answers. Nothing in your application has to learn a new type.
+PostgreJS names and caches a statement per connection from the second use of the same SQL, so the
+server parses and plans each distinct SQL once instead of on every call. `pg` has no equivalent -
+it sends an unnamed statement unless you name one yourself, so every call is parsed again.
 
-This is not a claim, it is the test suite: a **64-type decoding matrix** and a **32-case parameter
-matrix** run against a live server with `pg` as the live oracle rather than a table of expected
-values, so a change on *either* side is reported instead of quietly agreeing with something stale.
+Isolated on a repeated parameterized query, against the same facade with `prepare: false`:
+**1.21x** (0.830 ms to 0.685 ms, faster in 315 of 401 iterations, odds by luck < 1 in 10^18). This
+is the largest single thing in the list, and it is what `prepare: false` costs behind PgBouncer.
 
-### Some rows come back *more* correct
+### The wire format, which is *not* claimed
 
-This one came out of the testing rather than the design. Set a session's `DateStyle` to anything but ISO - a `German` or `SQL` locale
-is an ordinary thing for a European deployment - and ask `pg` for a date:
+PostgreJS reads PostgreSQL's binary format where `pg` asks for everything as text. It would be
+natural to credit the difference to that, and the measurement does not support it: the same bulk
+read came out 4% faster on binary in one run and 7% slower in another, and neither reached
+significance. Whatever the format is worth here, it is smaller than the noise on this machine, so it
+is left out of the claim rather than written up from the run that flattered it.
+
+### What it gives up: pipelining
+
+A PostgreJS `Connection` can put several statements on one connection at a time, and that is worth
+about 10x on one connection - 500 queries in 12 ms pipelined against 120 ms awaited. **This package
+does not use it.** `pg` puts every `query()` on a per-client queue and starts the next only when the
+previous has settled, and pg@9.0 is removing the last public view of that queue
+(`Client.activeQuery`, `Client.queryQueue`) rather than the queue itself. So nothing written against
+`pg` can depend on the other behaviour, and a `create temp table` with an `insert` into it, issued
+together, must not race.
+
+If you want it, `client.connection` is the real PostgreJS `Connection` and is not queued.
+
+## TypeORM's own test suite
+
+`scripts/run-typeorm-suite.sh` runs TypeORM's own functional suite against this facade, with `pg`
+over the same files, on the same server, in the same invocation as the control. Tag 1.1.1,
+PostgreSQL 18.4, 127 suite files:
+
+| | `pg` | `typeorm-postgrejs` |
+| --- | --- | --- |
+| passed | 806 | 806 |
+
+There is no expected-failure list, and that is deliberate rather than lazy: these tests leave schema
+behind and read it back, so the same file scores differently between two runs of the *same* driver -
+`create-table.test.js` scored 1/4 and then 5/0 with nothing changed. Only a control measured in the
+same invocation is worth comparing against, and the only thing that fails the comparison is a test
+this facade loses that `pg` wins.
+
+The script clones and compiles TypeORM at a pinned tag and patches one function - `getTypeOrmConfig()`,
+because an `ormconfig.json` cannot carry a `driver` object - then runs every file twice, each in its
+own process, on a freshly reset database.
+
+Alongside it, **275 tests** of its own at 99.9% coverage: unit tests; a 64-type decoding matrix and a
+32-case parameter matrix against a live server with **`pg` as the oracle** rather than a written-down
+table; and 20 TypeORM programs run through both drivers and deep-compared.
+
+```sh
+npm test                      # unit, live and differential - needs a server on PGHOST
+scripts/run-typeorm-suite.sh  # TypeORM's own suite, with a pg control
+```
+
+Running `pg` live rather than against expected values is what found the things nobody thought to
+assert: that TypeORM reads `rows` and `rowCount` through `hasOwnProperty`, so a class with accessors
+would make every query silently return nothing; that `money` has no parser in `pg` at all, so the
+day PostgreJS gained one the answers moved; and that TypeORM's own catalog query has no `ORDER BY`,
+so `getTable().columns` comes back in a plan-dependent order for *both* drivers.
+
+## How it differs from `pg`
+
+Measured by a 64-type decoding matrix and a 32-case parameter matrix that run every case through
+both. Everywhere not listed here, the two agree exactly - `numeric` and `int8` are strings, `money`
+keeps the server's `$12.34`, ranges are strings, dates are `Date`s.
+
+| case | `pg` | `typeorm-postgrejs` |
+| --- | --- | --- |
+| any date type on a server whose `DateStyle` is not `ISO` | `null` | the stored value |
+| `interval`, `point`, `circle` | a plain object | the same keys and values, plus `toPostgres()` |
+| a connection lost mid-statement | rejects `57P01` | rejects `08006` |
+| a pooled connection that dies while **idle** | nothing | `pool.on('error')` with `08006` |
+
+### `DateStyle`, where this package is right and `pg` is not
+
+A `German` or `SQL` locale is an ordinary thing for a European deployment, and `pg` cannot read what
+the server then writes:
 
 ```ts
 await client.query(`set datestyle to 'German, DMY'`);
 await client.query(`select '2024-03-05'::date as d, '2024-03-05 06:07'::timestamptz as ts`);
 
-// pg      { d: null, ts: null }
-// facade  { d: 2024-03-05, ts: 2024-03-05T06:07:00.000Z }
+// pg                  { d: null, ts: null }
+// typeorm-postgrejs   { d: 2024-03-05, ts: 2024-03-05T06:07:00.000Z }
 ```
 
-`pg` 8.23.0 hands back **`null`** for both, because it only parses PostgreSQL's ISO rendering and has
-nowhere else to go. The binary format carries no formatting at all, so the facade is simply immune.
-`test/B-live/date-style.spec.ts` holds this across every style and field order.
+`pg` 8.23.0 parses only PostgreSQL's ISO rendering and has nowhere else to go. The binary format
+carries no formatting at all. `test/B-live/date-style.spec.ts` holds this across four styles and
+three field orders, on both wire formats.
 
-### Your values can go back the way they came
+### Values that can be written back
 
 `interval`, `point` and `circle` arrive as PostgreJS classes. They read exactly like `pg`'s objects -
 same keys, same values, same `JSON.stringify` - and they can do one thing more:
@@ -114,68 +249,30 @@ await client.query('insert into shapes (p) values ($1)', [rows[0].p]); // writes
 Through `pg` that second call fails with `22P02`: its plain object has no way to render itself into
 a `point` again, so a value you just read is not a value you can pass on.
 
-### One option, and it has not moved since 2021
+### A lost connection
 
-`driver` is TypeORM's own option rather than a plugin API this package invented, and the surface
-behind it is **18 members** - unchanged from TypeORM 0.2.39, November 2021, through 1.1.1 today. The
-same facade was run against 0.3.31 and 1.1.1 with identical results. A seam that small and that
-still is one you can upgrade TypeORM across without thinking about it.
+Both reject the in-flight query and both emit `'error'` on the client, so a handler written for `pg`
+keeps working. The SQLSTATE differs - `pg` reports the server's own `57P01`, this reports `08006`
+for the connection itself - and the error here carries `processID`.
 
-### And PostgreJS's own types are one option away
-
-If you know the code reading your rows, take the richer values instead - `Interval`, `Range`,
-`Numeric`, a class per geometric type:
-
-```ts
-new DataSource({
-  // ...
-  driver: pgjs,
-  extra: { postgrejs: { decoding: 'native' } },
-});
-```
-
-`extra` is TypeORM's passthrough to the pool config, which is where the facade reads its own options.
-Behind PgBouncer in transaction pooling mode, the same place takes `{ postgrejs: { prepare: false } }`.
-The full list is `PgjsFacadeOptions` in [`src/config.ts`](src/config.ts).
-
-## How far it is tested
-
-- **806 of 806** on TypeORM's own functional suite, across 127 files - with a `pg` control run over
-  the same files, on the same server, in the same invocation.
-- **275 tests** of its own, at 99.9% coverage: unit tests, the live matrices above, and 20 TypeORM
-  programs run through both drivers and deep-compared.
-
-Running `pg` as a live control, rather than against a table of expected values, is what makes those
-numbers mean something - and it is what found the things nobody thought to assert. That TypeORM
-reads `rows` and `rowCount` through `hasOwnProperty`, so a class with accessors would make every
-query silently return nothing. That `money` has no parser in `pg` at all, so the day PostgreJS
-gained one the answers moved. That TypeORM's own catalog query has no `ORDER BY`, so
-`getTable().columns` comes back in a plan-dependent order for *both* drivers.
-
-Each of those became a fix in PostgreJS or in this package on the day it was measured, which is why
-there is no compatibility code here to read around.
-
-```bash
-npm test                      # unit, live and differential - needs a server on PGHOST
-scripts/run-typeorm-suite.sh  # TypeORM's own suite, with a pg control
-npx tsx scripts/bench.mts     # the numbers above
-```
-
-The suite script clones and compiles TypeORM at a pinned tag, patches the one function that stops an
-`ormconfig.json` carrying a `driver` object, and runs every file twice on a freshly reset database.
-It fails only on a test this facade loses that `pg` wins. There is no pinned expected-failure count
-on purpose: these tests leave schema behind and read it back, so the same file scores differently
-between runs, and only a control measured in the same invocation is worth comparing against.
+The pool is the other half. `pg` raises nothing there; PostgreJS reports a lost pooled connection on
+`pool.on('error')` as well. Where a caller already has the error, the duplicate is dropped
+(`suppressRedundantPoolError`); where the connection died **idle** and nobody would otherwise hear
+about it, it is reported.
 
 ## Requirements
 
 - Node.js >= 22
-- PostgreJS >= 3.10.0
-- TypeORM >= 0.3.0 < 2 (optional peer - the facade does not import TypeORM)
+- `postgrejs` >= 3.10.0 < 4. The facade is built on six things that release carries: `fetchAsString`
+  naming an array column by its element type and its `{ oid, arrays: false }` selector, the value
+  classes serialising as their fields, `toPostgres()` on them, `Circle` naming its radius `radius`,
+  and a lost connection reported on `'error'`. All six exist because this package's tests measured
+  them and reported them upstream.
+- `typeorm` >= 0.3.0 < 2, an optional peer - this package does not import TypeORM
 - `pg-query-stream`, only for `QueryRunner.stream()` - TypeORM loads it itself
 
 Built for TypeORM, and knex's entry point is covered too: `driver.Client`, the query-config call
-form and `pg-query-stream` all answer. `CLAUDE.md` has what the 18 members reach.
+form and `pg-query-stream` all answer.
 
 ## License
 
