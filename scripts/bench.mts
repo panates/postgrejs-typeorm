@@ -151,12 +151,27 @@ async function rawQueries(): Promise<void> {
       p.query('select * from bench_rows limit 100'),
     'point lookup by id': (p: any) =>
       p.query('select * from bench_rows where id = $1', [1234]),
-    // The control shape: one row back after a scan, so the server dominates
-    // and neither driver can win. If this one moves, nothing else here means
-    // anything.
     'count + filter': (p: any) =>
       p.query(
         'select count(*) from bench_rows where qty > $1 and active',
+        [5000],
+      ),
+    // The control shape: one row back after a scan heavy enough that the
+    // server dominates, so neither driver can win it. If this one moves,
+    // nothing else here means anything.
+    //
+    // It used to be `count + filter` above, and that stopped holding. On
+    // postgrejs 3.12.1 the light count comes out 2-7% ahead across runs,
+    // reaching significance in two of three, because at 0.8 ms the client's
+    // own per-message work is a measurable fraction of the call and 3.12.1
+    // cut it. Measured at the same iteration count, this shape and a
+    // `pg_sleep(0.005)` both come out level - +0.3% and +2.3%, neither
+    // significant - where the light count does not. So the premise moved to
+    // a shape that still holds it, and the light count stayed on as the
+    // ordinary workload row it turned out to be.
+    'count, server-dominated': (p: any) =>
+      p.query(
+        'select count(*) from bench_rows a, generate_series(1,10) where a.qty > $1',
         [5000],
       ),
     'insert one row': (p: any) =>
@@ -187,6 +202,7 @@ async function rawQueries(): Promise<void> {
       'select 100 rows': 201,
       'point lookup by id': 401,
       'count + filter': 101,
+      'count, server-dominated': 101,
       'insert one row': 401,
     },
     pools,
