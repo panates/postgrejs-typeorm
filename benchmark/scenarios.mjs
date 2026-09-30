@@ -125,7 +125,16 @@ export const DDL = [
    )`,
 ];
 
-/** The entity the ORM level runs over - one definition, both drivers. */
+/**
+ * The entity the ORM level reads - one definition, both clients.
+ *
+ * Writes go to `BenchWrite` below rather than here, and that is not
+ * tidiness: `save one entity` used to write into this table, which
+ * `find 5000 entities` then read without a bound. The memory pass runs one
+ * client at a time in its own process, so the second one always read a
+ * table the first had grown - a systematic bias, and large enough to
+ * reverse the row. Caught by a number flipping sign between runs.
+ */
 export const Row = new EntitySchema({
   name: 'BenchRow',
   tableName: 'rows',
@@ -140,6 +149,18 @@ export const Row = new EntitySchema({
     tags: { type: 'text', array: true, nullable: true },
     meta: { type: 'jsonb', nullable: true },
     active: { type: 'boolean' },
+  },
+});
+
+/** Where every ORM write goes, so no read scenario can see it grow. */
+export const Write = new EntitySchema({
+  name: 'BenchWrite',
+  tableName: 'writes',
+  schema: SCHEMA,
+  columns: {
+    id: { type: 'int', primary: true, generated: 'increment' },
+    name: { type: 'text', nullable: true },
+    blob: { type: 'bytea', nullable: true },
   },
 });
 
@@ -167,7 +188,7 @@ export function openDatabases(pooled = false, level = 'raw') {
       ...CONN,
       username: CONN.user,
       driver,
-      entities: [Row],
+      entities: [Row, Write],
       extra: { max },
       synchronize: false,
       logging: false,
@@ -379,7 +400,10 @@ export const SCENARIOS = [
     note: '5000 entities of 9 columns',
     iters: 3,
     pairs: 61,
-    run: ds => ds.getRepository('BenchRow').find(),
+    // Bounded on purpose. Unbounded it read whatever the table had grown
+    // to, which made it a different workload for whichever client ran
+    // second.
+    run: ds => ds.getRepository('BenchRow').find({ take: SEED_ROWS }),
   },
   {
     name: 'queryBuilder, 500 entities',
@@ -401,20 +425,10 @@ export const SCENARIOS = [
     name: 'save one entity',
     group: 'Write',
     level: 'orm',
-    note: '1 entity of 8 assigned columns',
+    note: '1 entity of 1 assigned column',
     iters: 50,
     pairs: 201,
-    run: (ds, i) =>
-      ds.getRepository('BenchRow').save({
-        name: `n${i}`,
-        email: `e${i}@example.com`,
-        age: 30,
-        balance: '1.23',
-        created: new Date(),
-        tags: ['a'],
-        meta: { i },
-        active: true,
-      }),
+    run: (ds, i) => ds.getRepository('BenchWrite').save({ name: `n${i}` }),
   },
 ];
 

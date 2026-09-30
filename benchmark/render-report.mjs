@@ -22,6 +22,15 @@ const ms = v => `${v.toFixed(3)} ms`;
 const kb = v =>
   v >= 1024 ? `${(v / 1024).toFixed(1)} MB` : `${Math.round(v)} KB`;
 const speedup = v => `${(1 / v).toFixed(2)}x`;
+/**
+ * Capped, because an exponent past 18 is precision the instrument does not
+ * have: it is the odds of a coin landing that way, not of the difference
+ * being that size, and the machine underneath is shared.
+ */
+const odds = p =>
+  p > 0.05
+    ? 'not significant'
+    : `< 1 in 10^${Math.min(18, Math.max(1, Math.floor(-Math.log10(p))))}`;
 const pct = v => `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`;
 
 const memRatio = s =>
@@ -221,3 +230,81 @@ ${heldRows}
 const out = join(HERE, '..', 'doc', 'BENCHMARKS.md');
 writeFileSync(out, doc);
 process.stderr.write(`wrote ${out}\n`);
+
+/**
+ * Rewrites one `<!-- bench:name -->` … `<!-- /bench:name -->` region of the
+ * README, so the numbers a reader meets first are generated rather than
+ * hand-copied. They were hand-copied once and every one of them was two
+ * releases out of date by the time anybody looked.
+ *
+ * Missing markers are an error rather than a no-op: silently rendering
+ * nothing is how a document keeps last quarter's figures.
+ */
+function replaceRegion(text, name, body) {
+  const open = `<!-- bench:${name} -->`;
+  const close = `<!-- /bench:${name} -->`;
+  const from = text.indexOf(open);
+  const to = text.indexOf(close);
+  if (from === -1 || to === -1)
+    throw new Error(`README.md has no ${open} … ${close} region`);
+  return `${text.slice(0, from + open.length)}\n\n${body}\n\n${text.slice(to)}`;
+}
+
+const headline = [
+  'findOneBy',
+  'find 100 entities',
+  'find 5000 entities',
+  'queryBuilder, 500 entities',
+  'save one entity',
+  'point read',
+  'page of 100',
+  'insert one row',
+  'bytea of 4 MB',
+  'int4[] of 100k',
+]
+  .map(n => rows.find(s => s.name === n))
+  .filter(Boolean);
+
+const env = `TypeORM ${r.versions.typeorm}, \`pg\` ${r.versions.pg}, PostgreJS ${r.versions.postgrejs}, PostgreSQL ${r.versions.postgresql}, loopback, Node ${r.node.replace('v', '')}. Medians per call, and allocation per call. How that was measured and how far each row can be trusted are in [How the numbers were measured](#how-the-numbers-were-measured); the full set is in [\`doc/BENCHMARKS.md\`](doc/BENCHMARKS.md).`;
+
+const big = payloads[0];
+const bytea = rows.find(s => s.name === 'bytea of 4 MB');
+const arr = rows.find(s => s.name === 'int4[] of 100k');
+const point = rows.find(s => s.name === 'point read');
+
+const signRows = rows
+  .filter(s => s.sign)
+  .map(
+    s =>
+      `| ${s.name}${s.group === 'Control' ? ' **(control)**' : ''} | ${s.sign.pairs} | ${s.sign.wins} | ${odds(s.sign.p)} |`,
+  )
+  .join('\n');
+
+const README = join(HERE, '..', 'README.md');
+let readme = readFileSync(README, 'utf8');
+readme = replaceRegion(
+  readme,
+  'intro',
+  `It is faster where it counts and holds far less memory doing it. A 4 MB \`bytea\` comes back in
+${ms(bytea.msDriver)} against ${ms(bytea.msControl)}, and at ${kb(bytea.memory[r.driver].allocPerCallKb)} a call against ${kb(bytea.memory[r.control].allocPerCallKb)} - \`pg\` reads that column as
+hex text, twice the size, off the JS heap where a heap figure alone cannot see it. A
+100 000-element \`int4[]\` runs ${speedup(arr.ratio)}, at ${kb(arr.memory[r.driver].allocPerCallKb)} against ${kb(arr.memory[r.control].allocPerCallKb)}. Ordinary queries gain less and gain it
+repeatably: a point read is the faster of the two in ${point.sign.wins} of ${point.sign.pairs} alternated pairs. All of it
+measured through TypeORM against \`pg\` on the same server: [\`doc/BENCHMARKS.md\`](doc/BENCHMARKS.md).`,
+);
+readme = replaceRegion(
+  readme,
+  'payload',
+  `- **Faster where the payload is large** - ${speedup(bytea.ratio)} on a 4 MB \`bytea\` and ${speedup(arr.ratio)} on a
+  100 000-element \`int4[]\`, on a fraction of the memory, because the values arrive in
+  PostgreSQL's binary format rather than as text to be parsed.`,
+);
+readme = replaceRegion(readme, 'headline', `${table(headline)}\n\n${env}`);
+readme = replaceRegion(
+  readme,
+  'signtest',
+  `| workload | pairs | \`${r.driver}\` faster in | odds of that by luck |\n| --- | --- | --- | --- |\n${signRows}`,
+);
+writeFileSync(README, readme);
+process.stderr.write(`wrote ${README}\n`);
+void big;
