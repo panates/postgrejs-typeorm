@@ -169,6 +169,20 @@ Tests come in three kinds and the split is the point:
   `postgres-interval` major, and that TypeORM's own `columnsSql` has no `ORDER BY` so
   `getTable().columns` comes back in a plan-dependent order for *both* drivers.
 
+`benchmark/` is the performance harness and is four files on purpose - `scenarios.mjs` is imported
+by both the timing pass and the memory workers, so the two cannot describe different work;
+`render-report.mjs` runs nothing, so `doc/BENCHMARKS.md` can be rewritten without re-measuring;
+`heap-worker.mjs` is one child process per client, because a baseline taken with both alive has
+their pools under it rather than in it. It is plain `.mjs` against `build/` for the same reason -
+a TypeScript loader inside the baseline window gives the number away. `benchmark/results/latest.json`
+is committed and is what the document is generated from.
+
+Two things about it are easy to get wrong and are written up where they live: there is **no shape
+where neither client wins**, so the control row is read on magnitude against the read rows rather
+than on the sign test, and the control does not control for *allocation* at all, because a fixed
+per-call cost has no term that scales with server time. `.claude/latency-is-half-the-benchmark.md`
+is the handoff this was built from and is worth reading before changing any of it.
+
 `scripts/run-typeorm-suite.sh` runs TypeORM's own functional suite against the facade. Read its
 header before changing it; two things there are not obvious:
 

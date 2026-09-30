@@ -78,68 +78,57 @@ you get for it:
 - **Checked against TypeORM's own functional suite** - 806 of 806, with `pg` run over the same
   files on the same server in the same invocation as the control.
 
-| workload | `pg` | `typeorm-postgrejs` | speedup |
-| --- | --- | --- | --- |
-| `findOneBy` | 0.621 ms | 0.530 ms | **1.17x** |
-| `find`, 100 entities | 1.159 ms | 0.982 ms | **1.18x** |
-| `find`, 5000 entities | 24.011 ms | 20.953 ms | **1.15x** |
-| query builder, 500 rows | 4.398 ms | 4.260 ms | **1.03x** |
-| `save` one entity | 1.796 ms | 1.736 ms | **1.03x** |
-| raw: 100 rows | 1.222 ms | 0.977 ms | **1.25x** |
-| raw: primary-key lookup | 0.590 ms | 0.542 ms | **1.09x** |
-| raw: one insert | 0.795 ms | 0.724 ms | **1.10x** |
+| workload | `pg` | `typeorm-postgrejs` | speedup | allocated |
+| --- | --- | --- | --- | --- |
+| `findOneBy` | 0.343 ms | 0.296 ms | **1.19x** | +6% |
+| `find`, 100 entities | 0.672 ms | 0.582 ms | **1.17x** | **-24%** |
+| `find`, 5000 entities | 8.335 ms | 5.904 ms | **1.42x** | **-29%** |
+| query builder, 500 entities | 1.192 ms | 0.994 ms | **1.20x** | **-38%** |
+| raw: 100 rows | 0.550 ms | 0.477 ms | **1.15x** | **-30%** |
+| raw: primary-key lookup | 0.281 ms | 0.247 ms | **1.14x** | +42% |
+| raw: one insert | 0.267 ms | 0.227 ms | **1.19x** | +89% |
+| raw: `bytea` of 4 MB | 36.412 ms | 16.199 ms | **2.25x** | **-92%** |
+| raw: `int4[]` of 100 000 | 23.210 ms | 6.302 ms | **3.68x** | **-91%** |
 
-TypeORM 1.1.1, `pg` 8.23.0, PostgreJS 3.10.0, PostgreSQL 18.4, loopback, Node 24, M1 Pro. Medians;
-[How the numbers were measured](#how-the-numbers-were-measured) says how far each row can be
-trusted.
+TypeORM 1.1.1, `pg` 8.23.0, PostgreJS 3.12.1, PostgreSQL 18.6, loopback, Node 24, M1 Pro. Medians
+per call; allocation is per call too. The full set, the method and how far each row can be trusted
+are in [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md), which is generated from a committed results file
+rather than written by hand.
 
-**Reads gain most, and the gain grows with how many rows come back.** Writes gain a little. Over a
-real network the share of time spent on the client is smaller, so expect less than a loopback
-figure.
+**The gain grows with how much comes back in one row.** An entity read gains 1.2x; five thousand of
+them 1.4x; a single row holding a large array or a `bytea` between 2.2x and 3.7x, and there the
+allocation falls by an order of magnitude - 4.1 MB a call against 51.8 MB on a 4 MB `bytea`.
+It allocates *more* on the smallest calls, where a fixed per-call cost has nothing to amortise
+against. Over a real network the share of time spent on the client is smaller, so expect less than a
+loopback figure.
 
 ## How the numbers were measured
 
-Both drivers run in one process and alternate on every iteration, so neither gets a warmer machine
-than the other. Each figure is the median of 61 to 401 iterations, depending on how expensive the
-shape is.
+Both clients run in one process and alternate on every pair, so neither gets a warmer machine, and
+each figure is a median. Memory is a separate pass, one child process per client, because a baseline
+taken with both alive has their pools and buffers under it rather than in it.
 
-The medians alone would not be worth much. This was measured on a shared machine and the absolute
-figures drift by more than the differences do - the same `pg` baseline for a primary-key lookup came
-out at 0.590 ms and 0.738 ms in one session. What does not drift is *which* of the two won each
-iteration, so that is counted separately:
+The medians alone would not be worth much - on a shared machine the absolute figures drift by more
+than the differences do - so which of the two won each pair is counted separately and reported as
+the odds of that split by luck. A sign test survives a noisy machine because it throws away *by how
+much*.
 
-| workload | iterations | `typeorm-postgrejs` faster in | odds of that by luck |
-| --- | --- | --- | --- |
-| `findOneBy` | 201 | 166 | < 1 in 10^18 |
-| `find`, 100 entities | 201 | 179 | < 1 in 10^18 |
-| `find`, 5000 entities | 61 | 48 | < 1 in 10^5 |
-| query builder, 500 rows | 101 | 62 | < 1 in 10 |
-| `save` one entity | 201 | 118 | < 1 in 10 |
-| raw: 100 rows | 201 | 166 | < 1 in 10^18 |
-| raw: primary-key lookup | 401 | 269 | < 1 in 10^11 |
-| raw: one insert | 401 | 259 | < 1 in 10^8 |
-| **raw: count over a scan** | **101** | **55** | **not significant** |
-
-That is a sign test - only which driver won counts, and by how much is thrown away, which is what
-makes it survive a noisy machine. Two drivers of equal speed would split the iterations evenly, so
-the last column is the probability of a split that lopsided from a fair coin.
-
-**The last row is the point of the table.** A `count` over a scan returns one row and is dominated
-by the server; neither driver can win it, and it comes out even. It is in the suite so that a run
-where it *does* move can be thrown away - which happened twice while writing this, on a machine
-under load.
-
-Run it yourself:
+There is a control row: one result after a scan the server dominates, whose job is to stay small
+while the read rows do not. A run where those two move by the same amount measured the machine.
 
 ```sh
-npx tsx scripts/bench.mts
+node benchmark/bench.mjs          # both passes, writes benchmark/results/latest.json
+node benchmark/render-report.mjs  # regenerates doc/BENCHMARKS.md, measures nothing
 ```
+
+[`doc/BENCHMARKS.md`](doc/BENCHMARKS.md) has the rest: every scenario, the allocation column, what
+each client holds between calls, and why a per-call peak is not among them.
 
 ## Where the speed comes from
 
-Two mechanisms were isolated, each by turning one thing off and leaving everything else alone, with
-the same alternation and the same sign test. They do not add up to the totals above and are not
-meant to: what is left is the client's own decoding path, which cannot be switched off to measure.
+Each of these is isolated by turning one thing off and leaving everything else alone, with the same
+alternation and the same sign test. They do not add up to the totals above and are not meant to:
+what is left is the client's own decoding path, which cannot be switched off to measure.
 
 ### It keeps prepared statements
 
@@ -147,17 +136,28 @@ PostgreJS names and caches a statement per connection from the second use of the
 server parses and plans each distinct SQL once instead of on every call. `pg` has no equivalent -
 it sends an unnamed statement unless you name one yourself, so every call is parsed again.
 
-Isolated on a repeated parameterized query, against the same facade with `prepare: false`:
-**1.21x** (0.830 ms to 0.685 ms, faster in 315 of 401 iterations, odds by luck < 1 in 10^18). This
-is the largest single thing in the list, and it is what `prepare: false` costs behind PgBouncer.
+Isolated on a repeated parameterized read, against the same facade with `prepare: false`: **1.14x**
+(0.622 ms to 0.545 ms, faster in 304 of 401 pairs). That is what `prepare: false` costs behind
+PgBouncer.
 
-### The wire format, which is *not* claimed
+### The wire format, and what it is worth
 
-PostgreJS reads PostgreSQL's binary format where `pg` asks for everything as text. It would be
-natural to credit the difference to that, and the measurement does not support it: the same bulk
-read came out 4% faster on binary in one run and 7% slower in another, and neither reached
-significance. Whatever the format is worth here, it is smaller than the noise on this machine, so it
-is left out of the claim rather than written up from the run that flattered it.
+PostgreJS reads PostgreSQL's binary format where `pg` asks for everything as text. This section used
+to say the difference could not be credited to that, because measured on a bulk read it came out 4%
+faster in one run and 7% slower in another and neither reached significance. That was the right
+report of the wrong experiment.
+
+What the format is worth scales with **values per row**, not with values, and a shape of many rows
+holding few values each hides it. The pair that settles it holds the same 5000 `float8`s twice, as
+5000 rows of one value and as one row holding an array of 5000 - same bytes, different shape:
+
+| | clock | allocated per call |
+| --- | --- | --- |
+| spread over 5000 rows | 1.66x | -13% |
+| packed into one row | **3.69x** | **-92%**, 220 KB against 2.7 MB |
+
+`pg` gets worse rather than this client getting better: one row of 5000 values is one long array
+literal with a substring cut per element.
 
 ### What it gives up: pipelining
 

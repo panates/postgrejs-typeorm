@@ -19,6 +19,7 @@ import {
   openDatabases,
   PREPARE,
   scenariosMatching,
+  SCHEMA,
   seed,
 } from './scenarios.mjs';
 
@@ -213,10 +214,74 @@ async function held(scenarios) {
   return out;
 }
 
+/**
+ * The mechanisms, isolated: the driver against *itself* with one thing
+ * turned off, so what the scenario tables show can be attributed rather
+ * than guessed at.
+ *
+ * Same alternation and same sign test as everything else. A mechanism that
+ * cannot win its own A/B does not belong in the explanation - which is the
+ * whole reason this pass exists, because the wire format could not, on the
+ * shapes this harness had before the packed ones were added.
+ */
+async function mechanisms() {
+  const facade = await import('../build/index.js');
+  const out = {};
+  const cases = {
+    'prepared statements': {
+      note: 'the same parameterized read, against `prepare: false`',
+      off: { ...CONN, max: 4, postgrejs: { prepare: false } },
+      on: { ...CONN, max: 4 },
+      run: p => p.query(`select * from ${SCHEMA}.rows where id = $1`, [1234]),
+      pairs: 401,
+      iters: 10,
+    },
+  };
+  for (const [name, c] of Object.entries(cases)) {
+    const off = new facade.Pool(c.off);
+    const on = new facade.Pool(c.on);
+    for (const p of [off, on]) for (let i = 0; i < 40; i++) await c.run(p);
+    const t = { off: [], on: [] };
+    let wins = 0;
+    for (let k = 0; k < c.pairs; k++) {
+      const one = {};
+      for (const [key, pool] of [
+        ['off', off],
+        ['on', on],
+      ]) {
+        const at = process.hrtime.bigint();
+        for (let i = 0; i < c.iters; i++) await c.run(pool);
+        one[key] = Number(process.hrtime.bigint() - at) / 1e6 / c.iters;
+        t[key].push(one[key]);
+      }
+      if (one.on < one.off) wins++;
+    }
+    const a = median(t.off);
+    const b = median(t.on);
+    out[name] = {
+      name,
+      note: c.note,
+      msWithout: a,
+      msWith: b,
+      ratio: b / a,
+      sign: signTest(wins, c.pairs),
+    };
+    process.stderr.write(
+      `  ${name.padEnd(28)} ${a.toFixed(3).padStart(9)} ${b.toFixed(3).padStart(9)}  ${wins}/${c.pairs}\n`,
+    );
+    await off.end();
+    await on.end();
+  }
+  return out;
+}
+
 const args = process.argv.slice(2);
 const which = args.find(a => !a.startsWith('--')) ?? 'all';
 const doLatency = !args.includes('--memory') || args.includes('--latency');
 const doMemory = !args.includes('--latency') || args.includes('--memory');
+const doMechanisms =
+  args.includes('--mechanisms') ||
+  (!args.includes('--latency') && !args.includes('--memory'));
 const scenarios = scenariosMatching(which);
 
 await seed();
@@ -280,6 +345,11 @@ if (doMemory) {
       memory: v,
       held: h[name],
     };
+}
+
+if (doMechanisms) {
+  process.stderr.write('\n== mechanisms\n');
+  results.mechanisms = await mechanisms();
 }
 
 mkdirSync(join(HERE, 'results'), { recursive: true });

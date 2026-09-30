@@ -186,6 +186,26 @@ per element.
 lower marginal cost per byte is the shape of it, and the control row shows the fixed part on its
 own - weighting the server cannot dilute an allocation that does not scale with server time.
 
+## Where it comes from
+
+The driver against *itself* with one thing turned off, so what the tables above show can be
+attributed rather than guessed at. Same alternation, same sign test.
+
+| mechanism | without | with | |
+| --- | --- | --- | --- |
+${Object.values(r.mechanisms ?? {})
+  .map(
+    m =>
+      `| ${m.name} - ${m.note} | ${ms(m.msWithout)} | **${ms(m.msWith)}** | **${speedup(m.ratio)}**<br>${m.sign.wins}/${m.sign.pairs} |`,
+  )
+  .join('\n')}
+
+The wire format is the other one, and it is not isolated by turning something off - it is the
+float8 pair above. That pair is why this section can say anything at all: measured only on
+many-rows-few-values shapes the format's contribution came out 4% faster in one run and 7% slower in
+another, neither significant, and the honest report was that it could not be claimed. The pair
+answers it by holding the values constant and changing only the shape.
+
 ## Held between calls
 
 What each client keeps at rest, warm. PostgreJS writes each message into one growing buffer per
