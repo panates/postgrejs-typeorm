@@ -116,6 +116,23 @@ export const DDL = [
   `alter table ${SCHEMA}.blobs alter column large set storage external`,
   `update ${SCHEMA}.blobs set large = large`,
 
+  // The same two payloads again, as columns of one table, so the ORM level
+  // can reach them through an entity. The raw scenarios read them from
+  // tables of their own; this is the same bytes one layer up, which is
+  // where a reader actually meets them.
+  `drop table if exists ${SCHEMA}.payloads`,
+  `create table ${SCHEMA}.payloads (
+     id serial primary key,
+     blob bytea,
+     numbers integer[]
+   )`,
+  `insert into ${SCHEMA}.payloads (blob, numbers)
+     values (repeat('x', 4194304)::bytea,
+             array(select 2147383646 + i from generate_series(1, 100000) i))`,
+  `alter table ${SCHEMA}.payloads alter column blob set storage external`,
+  `alter table ${SCHEMA}.payloads alter column numbers set storage external`,
+  `update ${SCHEMA}.payloads set blob = blob`,
+
   // what the write scenarios fill. Unlogged: this measures the client, and
   // a WAL write is the same cost on both sides while being large enough to
   // hide what is not.
@@ -149,6 +166,18 @@ export const Row = new EntitySchema({
     tags: { type: 'text', array: true, nullable: true },
     meta: { type: 'jsonb', nullable: true },
     active: { type: 'boolean' },
+  },
+});
+
+/** The payload columns, read through the ORM rather than through `query()`. */
+export const Payload = new EntitySchema({
+  name: 'BenchPayload',
+  tableName: 'payloads',
+  schema: SCHEMA,
+  columns: {
+    id: { type: 'int', primary: true, generated: 'increment' },
+    blob: { type: 'bytea', nullable: true },
+    numbers: { type: 'int', array: true, nullable: true },
   },
 });
 
@@ -188,7 +217,7 @@ export function openDatabases(pooled = false, level = 'raw') {
       ...CONN,
       username: CONN.user,
       driver,
-      entities: [Row, Write],
+      entities: [Row, Write, Payload],
       extra: { max },
       synchronize: false,
       logging: false,
@@ -420,6 +449,32 @@ export const SCENARIOS = [
         .orderBy('r.id')
         .take(500)
         .getMany(),
+  },
+  {
+    name: 'findOne with a 4 MB bytea',
+    group: 'Read',
+    level: 'orm',
+    note: '1 entity holding 4 MB',
+    iters: 3,
+    pairs: 41,
+    run: (ds, i) =>
+      ds.getRepository('BenchPayload').findOne({
+        where: { id: 1 + (i % 1) },
+        select: { id: true, blob: true },
+      }),
+  },
+  {
+    name: 'findOne with a 100k int4[]',
+    group: 'Read',
+    level: 'orm',
+    note: '1 entity holding 1 array of 100 000 values',
+    iters: 3,
+    pairs: 41,
+    run: (ds, i) =>
+      ds.getRepository('BenchPayload').findOne({
+        where: { id: 1 + (i % 1) },
+        select: { id: true, numbers: true },
+      }),
   },
   {
     name: 'save one entity',

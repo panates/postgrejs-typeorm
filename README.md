@@ -11,10 +11,10 @@ entities, your queries, your migrations.
 <!-- bench:intro -->
 
 It is faster where it counts and holds far less memory doing it. A 4 MB `bytea` comes back in
-17.326 ms against 39.402 ms, and at 4.1 MB a call against 51.9 MB - `pg` reads that column as
+20.248 ms against 45.979 ms, and at 4.1 MB a call against 51.9 MB - `pg` reads that column as
 hex text, twice the size, off the JS heap where a heap figure alone cannot see it. A
-100 000-element `int4[]` runs 3.42x, at 2.2 MB against 22.1 MB. Ordinary queries gain less and gain it
-repeatably: a point read is the faster of the two in 375 of 401 alternated pairs. All of it
+100 000-element `int4[]` runs 3.81x, at 2.2 MB against 23.3 MB. Ordinary queries gain less and gain it
+repeatably: a point read is the faster of the two in 337 of 401 alternated pairs. All of it
 measured through TypeORM against `pg` on the same server: [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md).
 
 <!-- /bench:intro -->
@@ -94,7 +94,7 @@ same migrations. What you get for it:
 
 <!-- bench:payload -->
 
-- **Faster where the payload is large** - 2.27x on a 4 MB `bytea` and 3.42x on a
+- **Faster where the payload is large** - 2.27x on a 4 MB `bytea` and 3.81x on a
   100 000-element `int4[]`, on a fraction of the memory, because the values arrive in
   PostgreSQL's binary format rather than as text to be parsed.
 
@@ -113,16 +113,16 @@ same migrations. What you get for it:
 
 | Scenario | `pg`<br>allocated per call | `typeorm-postgrejs`<br>allocated per call | |
 | --- | --- | --- | --- |
-| findOneBy - 1 entity of 9 columns | 0.324 ms<br>**66 KB/call** | **0.275 ms**<br>69 KB/call | **1.18x**<br>+5% |
-| find 100 entities - 100 entities of 9 columns | 0.623 ms<br>432 KB/call | **0.524 ms**<br>**314 KB/call** | **1.19x**<br>**-27%** |
-| find 5000 entities - 5000 entities of 9 columns | 8.624 ms<br>16.5 MB/call | **6.930 ms**<br>**10.9 MB/call** | **1.24x**<br>**-34%** |
-| queryBuilder, 500 entities - 500 entities after a where and an order by | 1.273 ms<br>1.7 MB/call | **1.057 ms**<br>**1.1 MB/call** | **1.21x**<br>**-39%** |
-| save one entity - 1 entity of 1 assigned column | 0.703 ms<br>**78 KB/call** | **0.642 ms**<br>102 KB/call | **1.10x**<br>+30% |
-| point read - 1 row of 9 columns | 0.300 ms<br>**19 KB/call** | **0.261 ms**<br>27 KB/call | **1.15x**<br>+42% |
-| page of 100 - 100 rows of 9 columns, mixed types | 0.691 ms<br>231 KB/call | **0.565 ms**<br>**165 KB/call** | **1.22x**<br>**-28%** |
-| insert one row - 1 row of 2 columns | 0.262 ms<br>**13 KB/call** | **0.224 ms**<br>24 KB/call | **1.17x**<br>+88% |
-| bytea of 4 MB - 1 row holding 4 MB | 39.402 ms<br>51.9 MB/call | **17.326 ms**<br>**4.1 MB/call** | **2.27x**<br>**-92%** |
-| int4[] of 100k - 1 row holding 1 array of 100 000 values | 24.662 ms<br>22.1 MB/call | **7.205 ms**<br>**2.2 MB/call** | **3.42x**<br>**-90%** |
+| findOneBy - 1 entity of 9 columns | 0.568 ms<br>**64 KB/call** | **0.473 ms**<br>71 KB/call | **1.20x**<br>+10% |
+| find 100 entities - 100 entities of 9 columns | 0.610 ms<br>433 KB/call | **0.522 ms**<br>**328 KB/call** | **1.17x**<br>**-24%** |
+| find 5000 entities - 5000 entities of 9 columns | 8.552 ms<br>16.5 MB/call | **6.186 ms**<br>**10.8 MB/call** | **1.38x**<br>**-35%** |
+| queryBuilder, 500 entities - 500 entities after a where and an order by | 1.277 ms<br>1.8 MB/call | **1.091 ms**<br>**1.1 MB/call** | **1.17x**<br>**-37%** |
+| save one entity - 1 entity of 1 assigned column | 0.894 ms<br>**79 KB/call** | **0.796 ms**<br>102 KB/call | **1.12x**<br>+29% |
+| point read - 1 row of 9 columns | 0.406 ms<br>**21 KB/call** | **0.353 ms**<br>28 KB/call | **1.15x**<br>+32% |
+| page of 100 - 100 rows of 9 columns, mixed types | 0.606 ms<br>232 KB/call | **0.515 ms**<br>**166 KB/call** | **1.18x**<br>**-28%** |
+| insert one row - 1 row of 2 columns | 0.342 ms<br>**12 KB/call** | **0.299 ms**<br>24 KB/call | **1.14x**<br>+100% |
+| bytea of 4 MB - 1 row holding 4 MB | 45.979 ms<br>51.9 MB/call | **20.248 ms**<br>**4.1 MB/call** | **2.27x**<br>**-92%** |
+| int4[] of 100k - 1 row holding 1 array of 100 000 values | 23.524 ms<br>23.3 MB/call | **6.172 ms**<br>**2.2 MB/call** | **3.81x**<br>**-91%** |
 
 TypeORM 1.1.1, `pg` 8.23.0, PostgreJS 3.12.1, PostgreSQL 18.6, loopback, Node 24.15.0. Medians per call, and allocation per call. How that was measured and how far each row can be trusted are in [How the numbers were measured](#how-the-numbers-were-measured); the full set is in [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md).
 
@@ -147,22 +147,24 @@ than the differences do - so which of the two won each pair is counted separatel
 
 | workload | pairs | `typeorm-postgrejs` faster in | odds of that by luck |
 | --- | --- | --- | --- |
-| point read | 401 | 375 | < 1 in 10^18 |
-| page of 100 | 201 | 192 | < 1 in 10^18 |
-| all 5000 rows | 61 | 51 | < 1 in 10^7 |
-| float8 spread over rows | 61 | 61 | < 1 in 10^18 |
+| point read | 401 | 337 | < 1 in 10^18 |
+| page of 100 | 201 | 185 | < 1 in 10^18 |
+| all 5000 rows | 61 | 52 | < 1 in 10^7 |
+| float8 spread over rows | 61 | 59 | < 1 in 10^14 |
 | float8 packed in one row | 61 | 61 | < 1 in 10^18 |
 | int4[] of 100k | 41 | 41 | < 1 in 10^12 |
 | bytea of 4 MB | 41 | 41 | < 1 in 10^12 |
-| insert one row | 401 | 369 | < 1 in 10^18 |
-| write a 4 MB bytea | 41 | 37 | < 1 in 10^6 |
-| count over a filter | 101 | 72 | < 1 in 10^4 |
-| count, server-dominated **(control)** | 101 | 54 | not significant |
-| findOneBy | 201 | 190 | < 1 in 10^18 |
-| find 100 entities | 201 | 184 | < 1 in 10^18 |
-| find 5000 entities | 61 | 60 | < 1 in 10^16 |
-| queryBuilder, 500 entities | 101 | 92 | < 1 in 10^17 |
-| save one entity | 201 | 174 | < 1 in 10^18 |
+| insert one row | 401 | 353 | < 1 in 10^18 |
+| write a 4 MB bytea | 41 | 33 | < 1 in 10^3 |
+| count over a filter | 101 | 89 | < 1 in 10^14 |
+| count, server-dominated **(control)** | 101 | 73 | < 1 in 10^5 |
+| findOneBy | 201 | 173 | < 1 in 10^18 |
+| find 100 entities | 201 | 183 | < 1 in 10^18 |
+| find 5000 entities | 61 | 61 | < 1 in 10^18 |
+| queryBuilder, 500 entities | 101 | 89 | < 1 in 10^14 |
+| save one entity | 201 | 147 | < 1 in 10^10 |
+| findOne with a 4 MB bytea | 41 | 41 | < 1 in 10^12 |
+| findOne with a 100k int4[] | 41 | 41 | < 1 in 10^12 |
 
 <!-- /bench:signtest -->
 

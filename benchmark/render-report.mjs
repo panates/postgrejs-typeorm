@@ -117,6 +117,7 @@ const memLosses = rows
   )
   .join(', ');
 
+const ormBlob = rows.find(s => s.name === 'findOne with a 4 MB bytea');
 const spread = rows.find(s => s.name === 'float8 spread over rows');
 const packed = rows.find(s => s.name === 'float8 packed in one row');
 
@@ -190,6 +191,12 @@ clock and ${pct(memRatio(spread) - 1)} on allocation, because the protocol's per
 pays. Packed into one row it is ${speedup(packed.ratio)} and ${pct(memRatio(packed) - 1)} - and \`pg\` gets worse rather than this
 client getting better, because one row of 5000 values is one long array literal with a substring cut
 per element.
+
+**Entity hydration dilutes the ordinary gain and not the payload one**, which is the reason both
+levels are here. \`findOne\` on a row holding 4 MB reads ${ms(ormBlob.msDriver)} against ${ms(ormBlob.msControl)} and ${kb(ormBlob.memory[r.driver].allocPerCallKb)}
+against ${kb(ormBlob.memory[r.control].allocPerCallKb)} - within a few percent of the same read through \`query()\`, because what TypeORM
+adds is per entity and the payload is one. On a shape of many small entities it is the layer above
+that decides the ratio.
 
 **It allocates more per call on small ones**: ${memLosses}. A higher fixed cost per call and a much
 lower marginal cost per byte is the shape of it, and the control row shows the fixed part on its
