@@ -1,5 +1,5 @@
 {
-  "measuredAt": "2026-09-30T10:23:00.583Z",
+  "measuredAt": "2026-09-30T10:28:25.345Z",
   "node": "v24.15.0",
   "prepare": "default (cached per connection)",
   "control": "pg",
@@ -54,7 +54,20 @@
           "heldKb": 727.1376953125,
           "idleHeldKb": 744.3515625
         }
-      }
+      },
+      "group": "Read",
+      "level": "raw",
+      "note": "1 row of 9 columns",
+      "iters": 50,
+      "msControl": 0.28052084,
+      "msDriver": 0.24699666,
+      "ratio": 0.8804930856473979,
+      "sign": {
+        "wins": 367,
+        "pairs": 401,
+        "p": 1.1001746956462038e-71
+      },
+      "verdict": "faster"
     },
     "page of 100": {
       "name": "page of 100",
@@ -99,7 +112,20 @@
           "heldKb": 863.1787109375,
           "idleHeldKb": 818.9296875
         }
-      }
+      },
+      "group": "Read",
+      "level": "raw",
+      "note": "100 rows of 9 columns, mixed types",
+      "iters": 20,
+      "msControl": 0.54955,
+      "msDriver": 0.4771354,
+      "ratio": 0.8682292785005914,
+      "sign": {
+        "wins": 159,
+        "pairs": 201,
+        "p": 3.2189906614945677e-17
+      },
+      "verdict": "faster"
     },
     "all 5000 rows": {
       "name": "all 5000 rows",
@@ -144,7 +170,20 @@
           "heldKb": 2973.9150390625,
           "idleHeldKb": 775.2109375
         }
-      }
+      },
+      "group": "Read",
+      "level": "raw",
+      "note": "5000 rows of 9 columns",
+      "iters": 3,
+      "msControl": 5.568666666666666,
+      "msDriver": 5.327264,
+      "ratio": 0.9566498264096733,
+      "sign": {
+        "wins": 38,
+        "pairs": 61,
+        "p": 0.07217743850092191
+      },
+      "verdict": "level"
     },
     "float8 spread over rows": {
       "name": "float8 spread over rows",
@@ -189,7 +228,20 @@
           "heldKb": 1042.7119140625,
           "idleHeldKb": 732.140625
         }
-      }
+      },
+      "group": "Read",
+      "level": "raw",
+      "note": "5000 rows of 1 value",
+      "iters": 5,
+      "msControl": 1.09035,
+      "msDriver": 0.658,
+      "ratio": 0.6034759480900629,
+      "sign": {
+        "wins": 61,
+        "pairs": 61,
+        "p": 8.673617379884035e-19
+      },
+      "verdict": "faster"
     },
     "float8 packed in one row": {
       "name": "float8 packed in one row",
@@ -234,7 +286,20 @@
           "heldKb": 715.07421875,
           "idleHeldKb": 683.6953125
         }
-      }
+      },
+      "group": "Read",
+      "level": "raw",
+      "note": "1 row holding 1 array of 5000 values",
+      "iters": 5,
+      "msControl": 1.9933,
+      "msDriver": 0.5401416,
+      "ratio": 0.27097857823709426,
+      "sign": {
+        "wins": 61,
+        "pairs": 61,
+        "p": 8.673617379884035e-19
+      },
+      "verdict": "faster"
     },
     "int4[] of 100k": {
       "name": "int4[] of 100k",
@@ -279,7 +344,20 @@
           "heldKb": 1475.7265625,
           "idleHeldKb": 668.453125
         }
-      }
+      },
+      "group": "Read",
+      "level": "raw",
+      "note": "1 row holding 1 array of 100 000 values",
+      "iters": 3,
+      "msControl": 23.210291666666667,
+      "msDriver": 6.301847333333334,
+      "ratio": 0.27151090662008776,
+      "sign": {
+        "wins": 41,
+        "pairs": 41,
+        "p": 9.094947017729299e-13
+      },
+      "verdict": "faster"
     },
     "bytea of 4 MB": {
       "name": "bytea of 4 MB",
@@ -324,7 +402,20 @@
           "heldKb": 3377.083984375,
           "idleHeldKb": -727.82421875
         }
-      }
+      },
+      "group": "Read",
+      "level": "raw",
+      "note": "1 row holding 4 MB",
+      "iters": 3,
+      "msControl": 36.41156933333333,
+      "msDriver": 16.199,
+      "ratio": 0.44488607046031564,
+      "sign": {
+        "wins": 41,
+        "pairs": 41,
+        "p": 9.094947017729299e-13
+      },
+      "verdict": "faster"
     },
     "insert one row": {
       "name": "insert one row",
@@ -369,7 +460,20 @@
           "heldKb": 629.3935546875,
           "idleHeldKb": 647.7109375
         }
-      }
+      },
+      "group": "Write",
+      "level": "raw",
+      "note": "1 row of 2 columns",
+      "iters": 50,
+      "msControl": 0.24169084000000002,
+      "msDriver": 0.20321416,
+      "ratio": 0.840802075908214,
+      "sign": {
+        "wins": 379,
+        "pairs": 401,
+        "p": 3.7797158800732125e-85
+      },
+      "verdict": "faster"
     },
     "write a 4 MB bytea": {
       "name": "write a 4 MB bytea",
@@ -414,7 +518,20 @@
           "heldKb": 3229.2255859375,
           "idleHeldKb": -845.87109375
         }
-      }
+      },
+      "group": "Write",
+      "level": "raw",
+      "note": "1 parameter of 4 MB - the one place both send binary",
+      "iters": 3,
+      "msControl": 17.934138666666666,
+      "msDriver": 16.043777666666667,
+      "ratio": 0.8945942687778186,
+      "sign": {
+        "wins": 37,
+        "pairs": 41,
+        "p": 1.0258372640237088e-7
+      },
+      "verdict": "faster"
     },
     "count over a filter": {
       "name": "count over a filter",
@@ -459,7 +576,20 @@
           "heldKb": 663.1171875,
           "idleHeldKb": 685.9921875
         }
-      }
+      },
+      "group": "Read",
+      "level": "raw",
+      "note": "1 row back after a scan of 5000",
+      "iters": 20,
+      "msControl": 0.46515209999999996,
+      "msDriver": 0.42728335,
+      "ratio": 0.9185884574099527,
+      "sign": {
+        "wins": 85,
+        "pairs": 101,
+        "p": 1.5442389845250531e-12
+      },
+      "verdict": "faster"
     },
     "count, server-dominated": {
       "name": "count, server-dominated",
@@ -490,7 +620,20 @@
           "wireOutKb": 0.040126953125,
           "tracedPerCallKb": 0
         }
-      }
+      },
+      "group": "Control",
+      "level": "raw",
+      "note": "1 row back after a scan of 500 000 - its magnitude has to stay small",
+      "iters": 3,
+      "msControl": 8.320152666666667,
+      "msDriver": 8.258944666666666,
+      "ratio": 0.992643404219586,
+      "sign": {
+        "wins": 76,
+        "pairs": 101,
+        "p": 3.7231423277544567e-7
+      },
+      "verdict": "level"
     },
     "findOneBy": {
       "name": "findOneBy",
@@ -535,7 +678,20 @@
           "heldKb": 1581.8408203125,
           "idleHeldKb": 1596.140625
         }
-      }
+      },
+      "group": "Read",
+      "level": "orm",
+      "note": "1 entity of 9 columns",
+      "iters": 50,
+      "msControl": 0.2965275,
+      "msDriver": 0.25011334,
+      "ratio": 0.8434743489221068,
+      "sign": {
+        "wins": 191,
+        "pairs": 201,
+        "p": 1.5505781761137002e-44
+      },
+      "verdict": "faster"
     },
     "find 100 entities": {
       "name": "find 100 entities",
@@ -580,7 +736,20 @@
           "heldKb": 1825.0615234375,
           "idleHeldKb": 1784.9375
         }
-      }
+      },
+      "group": "Read",
+      "level": "orm",
+      "note": "100 entities of 9 columns",
+      "iters": 20,
+      "msControl": 0.59056045,
+      "msDriver": 0.5052333,
+      "ratio": 0.8555149604075247,
+      "sign": {
+        "wins": 179,
+        "pairs": 201,
+        "p": 8.949851244987731e-32
+      },
+      "verdict": "faster"
     },
     "find 5000 entities": {
       "name": "find 5000 entities",
@@ -625,7 +794,20 @@
           "heldKb": 4655.71484375,
           "idleHeldKb": 1525.4453125
         }
-      }
+      },
+      "group": "Read",
+      "level": "orm",
+      "note": "5000 entities of 9 columns",
+      "iters": 3,
+      "msControl": 8.736514,
+      "msDriver": 6.163138666666666,
+      "ratio": 0.7054459784150368,
+      "sign": {
+        "wins": 61,
+        "pairs": 61,
+        "p": 8.673617379884035e-19
+      },
+      "verdict": "faster"
     },
     "queryBuilder, 500 entities": {
       "name": "queryBuilder, 500 entities",
@@ -670,7 +852,20 @@
           "heldKb": 1823.2041015625,
           "idleHeldKb": 1593.3984375
         }
-      }
+      },
+      "group": "Read",
+      "level": "orm",
+      "note": "500 entities after a where and an order by",
+      "iters": 10,
+      "msControl": 1.1920375,
+      "msDriver": 0.9937083,
+      "ratio": 0.8336216771703909,
+      "sign": {
+        "wins": 97,
+        "pairs": 101,
+        "p": 3.356387792688365e-24
+      },
+      "verdict": "faster"
     },
     "save one entity": {
       "name": "save one entity",
@@ -715,7 +910,20 @@
           "heldKb": 1796.0380859375,
           "idleHeldKb": 1814.8515625
         }
-      }
+      },
+      "group": "Write",
+      "level": "orm",
+      "note": "1 entity of 8 assigned columns",
+      "iters": 50,
+      "msControl": 0.8915666600000001,
+      "msDriver": 0.8548075,
+      "ratio": 0.9587701496150607,
+      "sign": {
+        "wins": 169,
+        "pairs": 201,
+        "p": 1.0797145463828524e-23
+      },
+      "verdict": "level"
     }
   }
 }

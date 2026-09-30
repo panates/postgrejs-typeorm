@@ -8,7 +8,7 @@
  * Both passes default to on.
  */
 import { execFile } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -221,14 +221,33 @@ const scenarios = scenariosMatching(which);
 
 await seed();
 
+/**
+ * A pass that was not asked for keeps what the last run measured.
+ *
+ * The two passes take tens of minutes between them and are usually run one
+ * at a time, so a partial run that replaced the file would silently drop
+ * the other half - which it did once, and the renderer printed empty
+ * tables rather than complaining.
+ */
+const previous = (() => {
+  try {
+    return JSON.parse(
+      readFileSync(join(HERE, 'results', 'latest.json'), 'utf8'),
+    );
+  } catch {
+    return { scenarios: {} };
+  }
+})();
+
 const results = {
+  ...previous,
   measuredAt: new Date().toISOString(),
   node: process.version,
   prepare: PREPARE,
   control: CONTROL,
   driver: DRIVER,
   versions: {},
-  scenarios: {},
+  scenarios: { ...previous.scenarios },
 };
 for (const p of ['pg', 'postgrejs', 'typeorm'])
   results.versions[p] = JSON.parse(
