@@ -283,13 +283,22 @@ The unit tests need nothing; the live and differential ones need a PostgreSQL at
 `PGDATABASE` override.
 
 ```sh
-npm test          # unit, live and differential tests
-npm run citest    # the same, with coverage
-npm run qc        # lint and circular dependency check
+npm test            # unit, live and differential tests
+npm run citest      # the same, with coverage
+npm run typecheck   # tsc --noEmit
+
+rman build          # check, lint, clean, compile, stamp - the whole pipeline
+rman lint           # eslint over the repository
+rman check          # circular dependency check
+rman format         # prettier
 
 scripts/run-typeorm-suite.sh   # TypeORM's own suite, on a database of its own
 npm run bench                  # the benchmarks, then `npm run bench:report`
 ```
+
+`lint`, `check`, `format` and the build are commands `@panates/rman-preset` contributes rather than
+scripts in `package.json`, so the flags behind them are pinned once for every repository that
+extends it. `.rmanrc.yml` is one line; `rman config --from-root` prints what it resolves to.
 
 The tests come in three kinds, and the split is deliberate:
 

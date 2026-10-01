@@ -35,10 +35,11 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup Environment
-        uses: panates/gh-setup-node@v1
+        uses: panates/gh-setup-node@v2
         with:
           node-version: '22'
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          rman-version: '2'
+          install: 'ci'
 
       - name: Run TypeORM's own suite against this facade
         run: scripts/run-typeorm-suite.sh

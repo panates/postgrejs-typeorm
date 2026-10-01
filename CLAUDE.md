@@ -271,6 +271,30 @@ Whether the facade is `pg`-faithful by default, PostgreJS-faithful by default, o
 still **the** design decision - it is **D1** in `doc/DRIVER-DESIGN.md`, now with the cost of each
 option priced, and it is yours to make.
 
+## Release and tooling - rman 2.x
+
+`.rmanrc.yml` is one line, `extends: '@panates/rman-preset'`, and that is deliberate: **the ground
+truth is `rman config --from-root`, never the preset's source.** Reading the preset here would have
+been wrong - 1.6.0 carries neither `group: false` nor `changelog.unreleased` nor
+`version.changelog`, because rman 2.7 absorbed all three as its own defaults, and the resolved
+config shows them.
+
+Single-package, so **`group`, `version.cascade` and `changelog.groupBy` are all deliberately
+unset** - there is nothing to group and nothing to cascade to, and setting them would change
+nothing.
+
+What the preset owns, and what must therefore **not** come back as an npm script: `build` (its
+`before` is `rman check`, `rman lint`, `rman clean`; its `exec` is `tsc -b`; its `after` copies
+README/LICENSE, writes the build manifest and stamps the version), `lint`, `check`, `format`,
+`clean`. A leftover `build` script would silently win over the config's `exec` and keep this
+repository on its old pipeline with the config looking correct; a leftover `prebuild` would run the
+same three steps twice. `rman build` names each step as it runs, and each has to appear once.
+
+`scripts/run-typeorm-suite.sh` calls `npx rman build`. It called `npm run build` until that script
+was deleted in the same commit - the sibling that missed this exited before its first test for
+weeks, because nothing ran it. Ours runs weekly on a cron, which is why it would have been caught,
+but the fix belongs with the cause.
+
 ## Working conventions
 
 Inherited from `../postgrejs`; they apply from the first commit.

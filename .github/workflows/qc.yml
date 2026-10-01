@@ -22,6 +22,11 @@ permissions:
 
 jobs:
   qc:
-    uses: panates/github-actions/.github/workflows/node-qc.yaml@v1
-    secrets:
-      PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+    uses: panates/github-actions/.github/workflows/node-qc.yaml@v3
+    with:
+      # The default is `npm run qc`, and that script is gone: `lint` and `check` are rman commands
+      # now, so a root script wrapping them was exactly the kind the migration deletes. Named here
+      # instead, which is where the one caller that wants it can see it.
+      qc_script: 'rman lint && rman check'
+    # PERSONAL_ACCESS_TOKEN dropped: the called workflow wants it only for npm.pkg.github.com, and
+    # nothing here resolves from there.
