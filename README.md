@@ -86,6 +86,22 @@ new DataSource({
 | `suppressRedundantPoolError` | `true` | PostgreJS reports a dead pooled connection on the pool *and* rejects the in-flight query; `pg` only rejects the query. This drops the duplicate |
 | `parseInputDatesAsUTC` | `false` | mirrors `pg`'s `defaults.parseInputDatesAsUTC`: render a `Date` parameter from its UTC fields rather than its local ones |
 | `inferParameterTypes` | `false` | lets PostgreJS declare an OID per parameter from the JS value, instead of sending every parameter unspecified the way `pg` does |
+| `connection` | - | PostgreJS's own connection settings, forwarded as given - everything it has that `pg` has no name for, and so no `pg` option to arrive through: `keepAlive`, `schema`, `timezone`, `hosts` and `targetSessionAttrs` for failover, `channelBinding`, `preparedStatementCacheSize`, `buffer`, `pipeline*`, `debugLogger`, `timing`, `asyncErrorHandling`. What this package translates out of the `pg` options is kept out of the type, so it cannot fight the translation |
+
+One worth knowing about in that last row. PostgreJS captures a caller-preserving async stack on
+every call (`asyncErrorHandling`, on by default) so a failure points at the line that made it;
+`pg` has nothing equivalent. **Through this facade the stack it preserves names this package's own
+`client.js` rather than your code**, because the call it reaches back to is the facade's, not
+yours - so you are paying for it and not collecting it:
+
+```ts
+extra: { postgrejs: { connection: { asyncErrorHandling: false } } }
+```
+
+It is left on by default because that is PostgreJS's default and this package does not quietly
+change its behaviour. Measured here it is below the noise of the allocation estimator the
+benchmarks use (12.90 KB a call against 12.85), so turn it off for tidiness rather than for a
+number.
 
 ## Why
 

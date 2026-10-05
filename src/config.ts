@@ -93,7 +93,67 @@ export interface PgjsFacadeOptions {
    * `Postgres pool raised an error` warning that `pg` never produces.
    */
   suppressRedundantPoolError?: boolean;
+
+  /**
+   * PostgreJS's own connection settings, forwarded as given.
+   *
+   * Everything this facade translates out of the `pg` options is kept out of
+   * the type, so this cannot quietly fight the translation. What is left is
+   * the part of PostgreJS that has no `pg` equivalent and therefore no `pg`
+   * option to arrive through: `keepAlive`, `schema`, `timezone`, `hosts` and
+   * `targetSessionAttrs` for failover, `channelBinding`, `buffer`,
+   * `pipeline*`, `debugLogger`, `preparedStatementCacheSize`, `timing` and
+   * `asyncErrorHandling`.
+   *
+   * It exists because the list above used to be unreachable. This file
+   * warns, forty lines down, that `{ connectionString }` is not a PostgreJS
+   * option and is silently ignored - and then did the same thing itself to
+   * every setting it had not thought of, because the translation is an
+   * allowlist. `asyncErrorHandling` is the one that was noticed: PostgreJS
+   * captures a caller-preserving async stack on every call, `pg` has no
+   * equivalent and pays nothing for it, and PostgreJS's own documentation
+   * names turning it off as what makes a benchmark against such a client
+   * fair. There was no way to turn it off from here.
+   *
+   * ```ts
+   * extra: { postgrejs: { connection: { asyncErrorHandling: false } } }
+   * ```
+   */
+  connection?: PgjsConnectionOptions;
 }
+
+/**
+ * The PostgreJS connection settings a consumer may set directly.
+ *
+ * Two groups are excluded, for two different reasons.
+ *
+ * **Translated from the `pg` options**, so setting them here would be a
+ * second source for one value: the connection target, credentials, TLS,
+ * `applicationName`, the connect timeout and the pool's own sizes.
+ *
+ * **Overridden per query**, so a value set here would be accepted and then
+ * silently lose: `rollbackOnError`, which `client.ts` pins to `false` on
+ * every call because PostgreJS otherwise wraps each statement in a
+ * savepoint, and `prepare`, which this facade already exposes at the top
+ * level of `PgjsFacadeOptions`.
+ */
+export type PgjsConnectionOptions = Omit<
+  PoolConfiguration,
+  | 'connectionString'
+  | 'host'
+  | 'port'
+  | 'user'
+  | 'password'
+  | 'database'
+  | 'applicationName'
+  | 'ssl'
+  | 'connectTimeoutMs'
+  | 'max'
+  | 'min'
+  | 'idleTimeoutMillis'
+  | 'rollbackOnError'
+  | 'prepare'
+>;
 
 /** The `pg` pool options TypeORM and knex actually pass. */
 export interface PgCompatibleConfig {
@@ -134,6 +194,7 @@ export function resolveFacadeOptions(
     prepare: o.prepare,
     normalizeErrors: o.normalizeErrors ?? true,
     suppressRedundantPoolError: o.suppressRedundantPoolError ?? true,
+    connection: o.connection ?? {},
   };
 }
 
@@ -155,6 +216,11 @@ export function toPoolConfiguration(
   // you end up with a pool of the default size wondering why `max` did
   // nothing.
   const cfg: PoolConfiguration = {
+    // PostgreJS's own settings first, so the translation below always wins
+    // for the keys it owns. `PgjsConnectionOptions` already excludes those,
+    // and this ordering is what keeps that true for a JavaScript caller who
+    // is not held to the type.
+    ...config.postgrejs?.connection,
     host: config.connectionString ?? config.host,
     port: config.port,
     user: config.user,
