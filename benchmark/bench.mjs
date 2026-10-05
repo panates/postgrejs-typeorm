@@ -86,6 +86,25 @@ async function latency(scenarios) {
       const opened = openDatabases(pooled, level);
       if (opened.ready) await opened.ready();
       for (const s of here) {
+        /* **Collect between scenarios, or they contaminate each other.**
+         *
+         * `all 5000 rows` allocates some 7 MB a call. Run on its own it is
+         * 1.44x and wins 61 of 61 in three rounds; run third in a process
+         * that had just done 20 000 point reads it came out *slower*, 17 of
+         * 61. Nothing about the workload changed - what changed is where the
+         * collector was in its cycle when each side's turn came, and a
+         * scenario large enough to trigger collections inherits whatever the
+         * one before it left behind.
+         *
+         * The memory pass never had this problem: it is one child process per
+         * client per scenario, for a related reason. This is the cheap
+         * version of the same isolation - the heap starts each scenario in
+         * the same place for both sides. Needs `--expose-gc`, and is skipped
+         * without it rather than failing, since the pass still works.
+         */
+        globalThis.gc?.();
+        globalThis.gc?.();
+
         // Warm both: the JIT, the pool, and the prepared statement each
         // distinct SQL earns on one of the two. Steady state is what is
         // being compared, not the first call.
@@ -303,6 +322,20 @@ const previous = (() => {
     return { scenarios: {} };
   }
 })();
+
+/**
+ * A scenario that no longer exists is dropped, however narrow the pass.
+ *
+ * The merge above is what keeps a `--latency` run from discarding the memory
+ * half, and the same line kept a deleted scenario alive in the file - the
+ * renderer went on printing a row for a workload nobody could re-measure.
+ * Pruning against the whole SCENARIOS list rather than against this run's
+ * selection is what makes it safe: a scenario left out of `bench.mjs read`
+ * is still declared, and stays.
+ */
+const declared = new Set(scenariosMatching('all').map(s => s.name));
+for (const name of Object.keys(previous.scenarios ?? {}))
+  if (!declared.has(name)) delete previous.scenarios[name];
 
 const results = {
   ...previous,

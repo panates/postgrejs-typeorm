@@ -45,7 +45,7 @@
     "test": "mocha",
     "precitest": "rman clean",
     "citest": "c8 mocha",
-    "bench": "node benchmark/bench.mjs",
+    "bench": "node --expose-gc benchmark/bench.mjs",
     "bench:report": "node benchmark/render-report.mjs",
     "prepare": "husky || true",
     "prepublishOnly": "echo 'Publish from the build directory - run rman publish, which generates that manifest itself.' && exit 1"

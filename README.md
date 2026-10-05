@@ -11,10 +11,10 @@ entities, your queries, your migrations.
 <!-- bench:intro -->
 
 It is faster where it counts and holds far less memory doing it. A 4 MB `bytea` comes back in
-20.248 ms against 45.979 ms, and at 4.1 MB a call against 51.9 MB - `pg` reads that column as
+13.231 ms against 29.600 ms, and at 4.0 MB a call against 51.8 MB - `pg` reads that column as
 hex text, twice the size, off the JS heap where a heap figure alone cannot see it. A
-100 000-element `int4[]` runs 3.81x, at 2.2 MB against 23.3 MB. Ordinary queries gain less and gain it
-repeatably: a point read is the faster of the two in 337 of 401 alternated pairs. All of it
+100 000-element `int4[]` runs 4.04x, at 2.2 MB against 23.0 MB. Ordinary queries gain less and gain it
+repeatably: a point read is the faster of the two in 399 of 401 alternated pairs. All of it
 measured through TypeORM against `pg` on the same server: [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md).
 
 <!-- /bench:intro -->
@@ -94,7 +94,7 @@ same migrations. What you get for it:
 
 <!-- bench:payload -->
 
-- **Faster where the payload is large** - 2.27x on a 4 MB `bytea` and 3.81x on a
+- **Faster where the payload is large** - 2.24x on a 4 MB `bytea` and 4.04x on a
   100 000-element `int4[]`, on a fraction of the memory, because the values arrive in
   PostgreSQL's binary format rather than as text to be parsed.
 
@@ -113,16 +113,16 @@ same migrations. What you get for it:
 
 | Scenario | `pg`<br>allocated per call | `typeorm-postgrejs`<br>allocated per call | |
 | --- | --- | --- | --- |
-| findOneBy - 1 entity of 9 columns | 0.568 ms<br>**64 KB/call** | **0.473 ms**<br>71 KB/call | **1.20x**<br>+10% |
-| find 100 entities - 100 entities of 9 columns | 0.610 ms<br>433 KB/call | **0.522 ms**<br>**328 KB/call** | **1.17x**<br>**-24%** |
-| find 5000 entities - 5000 entities of 9 columns | 8.552 ms<br>16.5 MB/call | **6.186 ms**<br>**10.8 MB/call** | **1.38x**<br>**-35%** |
-| queryBuilder, 500 entities - 500 entities after a where and an order by | 1.277 ms<br>1.8 MB/call | **1.091 ms**<br>**1.1 MB/call** | **1.17x**<br>**-37%** |
-| save one entity - 1 entity of 1 assigned column | 0.894 ms<br>**79 KB/call** | **0.796 ms**<br>102 KB/call | **1.12x**<br>+29% |
-| point read - 1 row of 9 columns | 0.406 ms<br>**21 KB/call** | **0.353 ms**<br>28 KB/call | **1.15x**<br>+32% |
-| page of 100 - 100 rows of 9 columns, mixed types | 0.606 ms<br>232 KB/call | **0.515 ms**<br>**166 KB/call** | **1.18x**<br>**-28%** |
-| insert one row - 1 row of 2 columns | 0.342 ms<br>**12 KB/call** | **0.299 ms**<br>24 KB/call | **1.14x**<br>+100% |
-| bytea of 4 MB - 1 row holding 4 MB | 45.979 ms<br>51.9 MB/call | **20.248 ms**<br>**4.1 MB/call** | **2.27x**<br>**-92%** |
-| int4[] of 100k - 1 row holding 1 array of 100 000 values | 23.524 ms<br>23.3 MB/call | **6.172 ms**<br>**2.2 MB/call** | **3.81x**<br>**-91%** |
+| findOneBy - 1 entity of 9 columns | 0.308 ms<br>**64 KB/call** | **0.267 ms**<br>70 KB/call | **1.15x**<br>+11% |
+| find 100 entities - 100 entities of 9 columns | 0.559 ms<br>410 KB/call | **0.490 ms**<br>**311 KB/call** | **1.14x**<br>**-24%** |
+| find 5000 entities - 5000 entities of 9 columns | 7.603 ms<br>16.2 MB/call | **5.647 ms**<br>**11.0 MB/call** | **1.35x**<br>**-32%** |
+| queryBuilder, 500 entities - 500 entities after a where and an order by | 1.104 ms<br>1.7 MB/call | **0.932 ms**<br>**1.0 MB/call** | **1.18x**<br>**-38%** |
+| save one entity - 1 entity of 1 assigned column | 0.614 ms<br>**78 KB/call** | **0.567 ms**<br>101 KB/call | **1.08x**<br>+30% |
+| point read - 1 row of 9 columns | 0.275 ms<br>**19 KB/call** | **0.246 ms**<br>28 KB/call | **1.12x**<br>+43% |
+| page of 100 - 100 rows of 9 columns, mixed types | 0.626 ms<br>229 KB/call | **0.528 ms**<br>**164 KB/call** | **1.19x**<br>**-28%** |
+| insert one row - 1 row of 2 columns | 0.228 ms<br>**13 KB/call** | **0.198 ms**<br>24 KB/call | **1.15x**<br>+90% |
+| bytea of 4 MB - 1 row holding 4 MB | 29.600 ms<br>51.8 MB/call | **13.231 ms**<br>**4.0 MB/call** | **2.24x**<br>**-92%** |
+| int4[] of 100k - 1 row holding 1 array of 100 000 values | 22.029 ms<br>23.0 MB/call | **5.448 ms**<br>**2.2 MB/call** | **4.04x**<br>**-90%** |
 
 TypeORM 1.1.1, `pg` 8.23.0, PostgreJS 3.12.1, PostgreSQL 18.6, loopback, Node 24.15.0. Medians per call, and allocation per call. How that was measured and how far each row can be trusted are in [How the numbers were measured](#how-the-numbers-were-measured); the full set is in [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md).
 
@@ -147,35 +147,40 @@ than the differences do - so which of the two won each pair is counted separatel
 
 | workload | pairs | `typeorm-postgrejs` faster in | odds of that by luck |
 | --- | --- | --- | --- |
-| point read | 401 | 337 | < 1 in 10^18 |
-| page of 100 | 201 | 185 | < 1 in 10^18 |
-| all 5000 rows | 61 | 52 | < 1 in 10^7 |
-| float8 spread over rows | 61 | 59 | < 1 in 10^14 |
+| point read | 401 | 399 | < 1 in 10^18 |
+| page of 100 | 201 | 200 | < 1 in 10^18 |
+| all 5000 rows | 61 | 61 | < 1 in 10^18 |
+| float8 spread over rows | 61 | 61 | < 1 in 10^18 |
 | float8 packed in one row | 61 | 61 | < 1 in 10^18 |
 | int4[] of 100k | 41 | 41 | < 1 in 10^12 |
 | bytea of 4 MB | 41 | 41 | < 1 in 10^12 |
-| insert one row | 401 | 353 | < 1 in 10^18 |
-| write a 4 MB bytea | 41 | 33 | < 1 in 10^3 |
-| count over a filter | 101 | 89 | < 1 in 10^14 |
-| count, server-dominated **(control)** | 101 | 73 | < 1 in 10^5 |
-| findOneBy | 201 | 173 | < 1 in 10^18 |
-| find 100 entities | 201 | 183 | < 1 in 10^18 |
+| insert one row | 401 | 393 | < 1 in 10^18 |
+| write a 4 MB bytea | 41 | 37 | < 1 in 10^6 |
+| findOneBy | 201 | 197 | < 1 in 10^18 |
+| find 100 entities | 201 | 179 | < 1 in 10^18 |
 | find 5000 entities | 61 | 61 | < 1 in 10^18 |
-| queryBuilder, 500 entities | 101 | 89 | < 1 in 10^14 |
-| save one entity | 201 | 147 | < 1 in 10^10 |
+| queryBuilder, 500 entities | 101 | 92 | < 1 in 10^17 |
 | findOne with a 4 MB bytea | 41 | 41 | < 1 in 10^12 |
 | findOne with a 100k int4[] | 41 | 41 | < 1 in 10^12 |
+| save one entity | 201 | 197 | < 1 in 10^18 |
 
 <!-- /bench:signtest -->
 
 That is a sign test: only which client won counts, and by how much is thrown away, which is what
 makes it survive a noisy machine.
 
-**The control row is the point of the table.** One result after a scan the server dominates, whose
-job is to stay small while the read rows do not. Read it on magnitude rather than on significance -
-there is no shape where neither client wins, because this one is a hair faster on everything and
-enough pairs always find it. A run where the control moves as much as a bulk read measured the
-machine.
+**Every scenario is one the client dominates**, and that is a selection rule rather than a
+coincidence. A shape where PostgreSQL does most of the work measures PostgreSQL: its ratio is set
+by how much scanning or writing was asked for, and a reader takes it for a property of the
+workload. The one row here whose clock is not the client's is the 4 MB write, where both sides are
+pushing bytes through a socket at the same speed - it is kept for its allocation column and says
+so.
+
+There was a deliberately server-dominated row as a control, on the theory that a shape neither
+client can win is the cheapest check on a whole run. It was removed: swept across scan sizes its
+speedup read 1.04x, 0.95x, 1.00x and 0.94x, twice significant in opposite directions, so it was not
+doing that job either. The sign test is the guard instead, and it is the per-row version of the
+same check.
 
 ```sh
 npm run bench          # both passes, writes benchmark/results/latest.json

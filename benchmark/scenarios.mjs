@@ -336,7 +336,14 @@ export const SCENARIOS = [
     name: 'write a 4 MB bytea',
     group: 'Write',
     level: 'raw',
-    note: '1 parameter of 4 MB - the one place both send binary',
+    /* **Read the allocation column, not the clock.** Both clients push 4 MB
+     * through a socket and the server stores it; measured, the send path on
+     * its own (`select length($1::bytea)`, where the server barely works) is
+     * 1.03x and the insert 1.06x, so the clock here is the wire rather than
+     * either client. What is a real client difference is what it costs to
+     * get those bytes out: 3.3 MB allocated against 5.2. The row is kept for
+     * that column. */
+    note: '1 parameter of 4 MB - the clock is the socket, the allocation is not',
     iters: 3,
     pairs: 41,
     run: (db, i) =>
@@ -345,59 +352,22 @@ export const SCENARIOS = [
         BLOB_4MB,
       ]),
   },
-  {
-    name: 'count over a filter',
-    group: 'Read',
-    level: 'raw',
-    note: '1 row back after a scan of 5000',
-    iters: 20,
-    pairs: 101,
-    run: (db, i) =>
-      q(db, `select count(*) from ${SCHEMA}.rows where age > $1`, [
-        20 + (i % 2),
-      ]),
-  },
   /**
-   * The negative control, and the reason to believe any of the rest.
+   * There is no control row here, and removing the one there was is the
+   * point rather than an omission.
    *
-   * One row back after a scan heavy enough that the server dominates, so
-   * neither client can win it. If this moves, the instrument is measuring
-   * itself and the run is noise.
+   * It was a `count` over a scan heavy enough that the server dominated, so
+   * that neither client could win it and a run where it moved could be
+   * thrown away. Two things killed it. Swept across scan sizes its speedup
+   * read 1.04x, 0.95x, 1.00x and 0.94x - wandering around 1.0, twice
+   * "significant" in opposite directions - so it did not do the job either.
+   * And a scenario the server dominates measures PostgreSQL, which is not
+   * what any of this is about: every row here has to be mostly the client's
+   * own CPU or allocation, or its number misleads whoever reads it.
    *
-   * **Read it on magnitude, not on the sign test.** That is a correction
-   * to how this row was used before, and it came out of trying to make it
-   * hold. There is no shape where neither client wins: measured over the
-   * same scan at 50 000, 500 000 and 1.5 million rows, the win rate stays
-   * around 60% at every size and the sign test calls all three significant
-   * - the driver is a hair faster on everything, and enough pairs will
-   * always find a small fixed advantage. What does collapse is the
-   * *size*: across four runs of this shape, -1.5%, -6.4%, -0.3% and -4.6%,
-   * against -45% on a bulk read. So the check is the order of magnitude
-   * between this row and the read rows, not a threshold on this row alone
-   * - its own median is only worth a few percent at 9 ms. A run where the
-   * server is doing 9 ms of work and this row still moves like a bulk read
-   * is a run where the machine, not the client, was measured.
-   *
-   * `count over a filter` above was the control until postgrejs 3.12.1,
-   * when it started coming out 2-7% ahead - at 0.8 ms the client's own
-   * per-message work is a measurable fraction of the call, and 3.12.1 cut
-   * it. It stayed on as the ordinary workload row it turned out to be.
+   * The sign test is the guard instead, and it is the per-row version of the
+   * same check: a run too noisy to trust says so on every row at once.
    */
-  {
-    name: 'count, server-dominated',
-    group: 'Control',
-    level: 'raw',
-    note: '1 row back after a scan of 500 000 - its magnitude has to stay small',
-    iters: 3,
-    pairs: 101,
-    run: (db, i) =>
-      q(
-        db,
-        `select count(*) from ${SCHEMA}.rows a, generate_series(1,100)
-           where a.age > $1`,
-        [20 + (i % 2)],
-      ),
-  },
 
   // ---- the same work through TypeORM ---------------------------------
   {
