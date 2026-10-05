@@ -70,6 +70,23 @@ const CASES: [string, string, any[]][] = [
   ['point', 'select $1::point::text v', ['(1,2)']],
   ['= any()', 'select ($1 = any(array[1,2,3]))::text v', [2]],
   ['null', 'select coalesce($1::text, x) v', [null]],
+
+  /**
+   * A parameter with no context at all. These are the shapes where
+   * declaring a type and leaving it unspecified give different answers, so
+   * they are the ones that say whether the policy in `src/params.ts` is
+   * still doing anything. They came from the `postgrejs` session, which
+   * offered `select $1` with `1.5` as a case its own change improved - and
+   * the integer and boolean forms of it turned out to be live divergences
+   * this file was not asking about.
+   */
+  ['bare parameter, integer', 'select $1 v', [12]],
+  ['bare parameter, non-integer', 'select $1 v', [1.5]],
+  ['bare parameter, boolean', 'select $1 v', [true]],
+  ['bare parameter, string', 'select $1 v', ['abc']],
+  ['bare parameter, null', 'select $1 v', [null]],
+  ['arithmetic on an undeclared parameter', 'select $1 * 2 v', [1.5]],
+  ['arithmetic on an undeclared integer', 'select $1 + 1 v', [12]],
 ];
 
 describe('B-live: parameters go on the wire the way pg puts them there', () => {
@@ -85,6 +102,28 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
     await facade.end();
   });
 
+  /**
+   * **The type is half the answer, and this used to throw it away.**
+   *
+   * The comparison was `String(v)`, under which `12` and `'12'` are the
+   * same string and so are `true` and `'true'`. A parameter policy that
+   * declares a type instead of leaving it unspecified changes exactly that
+   * and nothing else on these shapes - `select $1` with `12` gives `pg`'s
+   * string and PostgreJS's number - so the one property this matrix exists
+   * to hold was the one it could not see. It read 42/42 over three live
+   * divergences.
+   */
+  const show = (v: any): string => {
+    if (v === null || v === undefined) return String(v);
+    if (typeof v === 'bigint') return `bigint:${v}`;
+    if (Buffer.isBuffer(v)) return `buffer:${v.toString('hex')}`;
+    if (Array.isArray(v)) return `array:[${v.map(show).join(',')}]`;
+    if (v instanceof Date) return `date:${v.toISOString()}`;
+    if (typeof v === 'object')
+      return `${v.constructor?.name}:${JSON.stringify(v)}`;
+    return `${typeof v}:${String(v)}`;
+  };
+
   const run = async (
     p: { query: (t: string, v: any[]) => Promise<any> },
     sql: string,
@@ -92,7 +131,7 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
   ) => {
     try {
       const r = await p.query(sql, values);
-      return `ok:${String(r.rows[0].v)}`;
+      return `ok:${show(r.rows[0].v)}`;
     } catch (e: any) {
       return `err:${e.code ?? e.message}`;
     }
