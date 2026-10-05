@@ -634,7 +634,7 @@
       "name": "insert one row",
       "group": "Write",
       "level": "raw",
-      "note": "1 row of 2 columns",
+      "note": "1 row, 1 parameter, nothing returned",
       "iters": 50,
       "msControl": 0.23077915999999998,
       "msDriver": 0.19328,

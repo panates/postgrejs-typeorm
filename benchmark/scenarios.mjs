@@ -499,10 +499,50 @@ export const SCENARIOS = [
       ),
   },
   {
+    /**
+     * **The floor, and that is its job.** One row, one parameter, nothing
+     * returned: the smallest statement anyone would send, so the per-call
+     * cost is most of what it counts. Every other row here is partly about
+     * payload; this one is about what a statement costs before the payload.
+     *
+     * Which is why its percentage must not be read as a fact about writing.
+     * Swept, the *gap* barely moves while the denominator does - per call,
+     * `pg` against this facade:
+     *
+     * ```
+     *   no parameters, nothing returned     6.2  ->  14.6   +134%
+     *   1 parameter                         8.1  ->  15.4    +90%
+     *   1 parameter, returning id          10.3  ->  17.4    +68%
+     *   5 parameters                       10.2  ->  17.7    +74%
+     *   5 parameters, returning *          16.4  ->  21.0    +28%
+     *   10 rows, 50 parameters             23.2  ->  36.4    +57%
+     * ```
+     *
+     * A flat 7 KB or so a statement, across a 4x range of shapes. The
+     * published percentage is that constant over whichever denominator the
+     * scenario chose, and this one chose nearly the smallest there is.
+     *
+     * **And the 7 KB is mostly not this facade's.** The same statement with
+     * one parameter, one client per process, medians of three:
+     * `pg` 8.96 KB a call, PostgreJS with nothing on it 13.24, this facade
+     * 15.01. So ~4.3 KB of the gap is the client underneath and ~1.8 KB is
+     * what the facade adds on top. Reported upstream as
+     * `../postgrejs/.claude/a-fixed-cost-per-statement.md` rather than
+     * hidden behind a larger denominator. (The parameter is not decoration:
+     * with none, `pg` sends a simple Query and PostgreJS still runs
+     * Parse/Bind/Describe/Execute/Sync, and the two are not on the same
+     * protocol.)
+     *
+     * It keeps no RETURNING, unlike `save one entity`, which TypeORM sends
+     * as `INSERT ... RETURNING "id"`. That is deliberate here: adding one
+     * would move this row from +90% to +68% by giving the decoder something
+     * to do, and a floor that has been softened is not a floor. The ORM
+     * level is where the consumer's actual insert is measured.
+     */
     name: 'insert one row',
     group: 'Write',
     level: 'raw',
-    note: '1 row of 2 columns',
+    note: '1 row, 1 parameter, nothing returned',
     iters: 50,
     pairs: 401,
     run: (db, i) =>

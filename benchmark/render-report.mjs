@@ -229,7 +229,17 @@ adds is per entity and the payload is one. On a shape of many small entities it 
 that decides the ratio.
 
 **It allocates more per call on small ones**: ${memLosses}. A higher fixed cost per call and a much
-lower marginal cost per byte is the shape of it.
+lower marginal cost per byte is the shape of it, and the fixed part is a constant rather than a
+rate - which is worth knowing before reading a percentage off that list. Swept across insert shapes
+it stays near 7 KB a statement while the denominator moves: no parameters +134%, one +90%, one with
+\`returning id\` +68%, five +74%, five returning the row +28%, ten rows of five +57%. Only the
+denominator is changing.
+
+Most of that 7 KB is not this package. The same one-parameter statement, one client per process,
+medians of three: \`pg\` 8.96 KB a call, PostgreJS with nothing on it 13.24, this facade 15.01 - so
+about 4.3 KB is the client underneath and 1.8 KB is what the facade adds. The larger half is
+reported upstream rather than worked around here, which is this package's rule for anything that
+belongs to the client.
 
 ## Where it comes from
 

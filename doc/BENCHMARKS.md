@@ -72,7 +72,7 @@ nobody asked, under a name that promises otherwise.
 
 | Scenario | `pg`<br>allocated per call | `typeorm-postgrejs`<br>allocated per call | |
 | --- | --- | --- | --- |
-| insert one row - 1 row of 2 columns | 0.231 ms<br>**9 KB/call** | **0.193 ms**<br>16 KB/call | **1.19x**<br>+73% |
+| insert one row - 1 row, 1 parameter, nothing returned | 0.231 ms<br>**9 KB/call** | **0.193 ms**<br>16 KB/call | **1.19x**<br>+73% |
 | insert 500 rows - 500 rows in 1 statement, 2500 parameters | 3.088 ms<br>**958 KB/call** | **2.282 ms**<br>1.2 MB/call | **1.35x**<br>+29% |
 | write a 100k int4[] - 1 parameter holding 100 000 values, text on both sides | 17.847 ms<br>**27.2 MB/call** | **17.782 ms**<br>28.1 MB/call | 1.00x level<br>+3% |
 | twenty inserts in a transaction - 20 rows, one statement each, inside one transaction | 4.865 ms<br>**166 KB/call** | **4.161 ms**<br>306 KB/call | **1.17x**<br>+85% |
@@ -110,7 +110,17 @@ adds is per entity and the payload is one. On a shape of many small entities it 
 that decides the ratio.
 
 **It allocates more per call on small ones**: **twenty inserts in a transaction** 306 KB against 166 KB, **insert one row** 16 KB against 9 KB, **save one entity** 103 KB against 78 KB, **insert 500 rows** 1.2 MB against 958 KB, **point read** 20 KB against 17 KB, **findOneBy** 70 KB against 64 KB, **box of 5k rows** 2.0 MB against 1.9 MB, **write a 100k int4[]** 28.1 MB against 27.2 MB. A higher fixed cost per call and a much
-lower marginal cost per byte is the shape of it.
+lower marginal cost per byte is the shape of it, and the fixed part is a constant rather than a
+rate - which is worth knowing before reading a percentage off that list. Swept across insert shapes
+it stays near 7 KB a statement while the denominator moves: no parameters +134%, one +90%, one with
+`returning id` +68%, five +74%, five returning the row +28%, ten rows of five +57%. Only the
+denominator is changing.
+
+Most of that 7 KB is not this package. The same one-parameter statement, one client per process,
+medians of three: `pg` 8.96 KB a call, PostgreJS with nothing on it 13.24, this facade 15.01 - so
+about 4.3 KB is the client underneath and 1.8 KB is what the facade adds. The larger half is
+reported upstream rather than worked around here, which is this package's rule for anything that
+belongs to the client.
 
 ## Where it comes from
 

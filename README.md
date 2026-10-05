@@ -120,7 +120,7 @@ same migrations. What you get for it:
 | save one entity - 1 entity of 1 assigned column | 0.711 ms<br>**78 KB/call** | **0.650 ms**<br>103 KB/call | **1.09x**<br>+31% |
 | point read - 1 row of 9 columns | 0.274 ms<br>**17 KB/call** | **0.238 ms**<br>20 KB/call | **1.15x**<br>+20% |
 | page of 100 - 100 rows of 9 columns, mixed types | 0.530 ms<br>234 KB/call | **0.442 ms**<br>**157 KB/call** | **1.20x**<br>**-33%** |
-| insert one row - 1 row of 2 columns | 0.231 ms<br>**9 KB/call** | **0.193 ms**<br>16 KB/call | **1.19x**<br>+73% |
+| insert one row - 1 row, 1 parameter, nothing returned | 0.231 ms<br>**9 KB/call** | **0.193 ms**<br>16 KB/call | **1.19x**<br>+73% |
 | bytea of 4 MB - 1 row holding 4 MB | 34.295 ms<br>51.6 MB/call | **15.132 ms**<br>**4.1 MB/call** | **2.27x**<br>**-92%** |
 | int4[] of 100k - 1 row holding 1 array of 100 000 values | 22.432 ms<br>23.1 MB/call | **5.579 ms**<br>**2.2 MB/call** | **4.02x**<br>**-91%** |
 
