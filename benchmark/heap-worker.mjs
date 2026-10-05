@@ -81,7 +81,10 @@ if (!scenario) throw new Error(`no scenario named ${name}`);
 if (which !== CONTROL && which !== DRIVER)
   throw new Error(`no client named ${which}`);
 
-const opened = openDatabases(scenario.pooled, scenario.level);
+// `which`, so this process builds only the client it measures - see
+// openDatabases. A child that constructs both has them both alive in it,
+// which is the whole thing a child per client is for.
+const opened = openDatabases(scenario.pooled, scenario.level, which);
 if (opened.ready) await opened.ready();
 const db = opened.dbs[which];
 

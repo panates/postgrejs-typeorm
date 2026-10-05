@@ -227,13 +227,24 @@ export const Write = new EntitySchema({
  * One client per driver, at the same pool size, built the way a consumer
  * would get them. The ORM level gets a `DataSource` over the same entity.
  */
-export function openDatabases(pooled = false, level = 'raw') {
+/**
+ * @param only when given, build **only** that client.
+ *
+ * The memory workers pass it, and must: a child that constructs both has
+ * them both alive in the one process, which is the thing a child per client
+ * exists to prevent. It cost a measurement - `box of 5k rows` read 1.89
+ * MB/call for `pg` with nothing else in the process and 2.37 with the other
+ * client's connection merely open beside it, and the second figure is the
+ * one the report carried. The latency pass needs both, because it alternates
+ * between them in one process by design.
+ */
+export function openDatabases(pooled = false, level = 'raw', only) {
   const max = pooled ? 10 : 1;
+  const wanted = name => !only || name === only;
   if (level === 'raw') {
-    const pools = {
-      [CONTROL]: new PgPool({ ...CONN, max }),
-      [DRIVER]: new facade.Pool({ ...CONN, max }),
-    };
+    const pools = {};
+    if (wanted(CONTROL)) pools[CONTROL] = new PgPool({ ...CONN, max });
+    if (wanted(DRIVER)) pools[DRIVER] = new facade.Pool({ ...CONN, max });
 
     /**
      * A **checked-out connection**, not the pool, unless the scenario is
@@ -285,7 +296,9 @@ export function openDatabases(pooled = false, level = 'raw') {
       synchronize: false,
       logging: false,
     });
-  const dbs = { [CONTROL]: make(undefined), [DRIVER]: make(facade) };
+  const dbs = {};
+  if (wanted(CONTROL)) dbs[CONTROL] = make(undefined);
+  if (wanted(DRIVER)) dbs[DRIVER] = make(facade);
   return {
     dbs,
     async ready() {
@@ -399,20 +412,19 @@ export const SCENARIOS = [
     /* The socket counter reads 423 KB in on **both** sides, the identical
      * bytes: this facade asks for the whole geometric family as text,
      * because `pg` returns strings for it and matching `pg` means giving up
-     * the decoder. So whatever this row shows cannot be the wire.
+     * the decoder. So nothing this row shows can be credited to the wire,
+     * which is what makes it worth having - it is the one shape here where
+     * the two are handed byte for byte the same thing. On it the facade is
+     * 1.09x on the clock and allocates 4% more.
      *
-     * It shows 1.09x and 16% less allocated. That is the row machinery
-     * underneath - the same text, read off the socket and turned into rows
-     * more cheaply. Worth having for exactly that reason: it is the one
-     * shape here where the two clients are handed byte-for-byte the same
-     * thing, so nothing else can be credited.
-     *
-     * (It read +4% until the raw scenarios moved off `pool.query()` and
-     * -16% after, and **why is not established**. The per-checkout wrapper
-     * it stopped paying is 7.6 KB a call against a difference of about 380
-     * KB in 2.4 MB, so that is not the explanation; it is recorded here as
-     * an open question rather than given one. A dialect that lets PostgreJS
-     * decode `box` measures 1.87x on the same shape.) */
+     * It read -16% for one round, and chasing that down found a defect in
+     * the harness rather than anything about either client: the memory
+     * worker built *both* clients in the child, so each measurement had the
+     * other's connection open beside it. Measured, that is worth 1.89 MB
+     * against 2.37 for `pg` on this row - a fifth of the figure - and it
+     * flattered the facade on every mid-sized row. The worker builds only
+     * the client it measures now. A dialect that lets PostgreJS decode
+     * `box` measures 1.87x on the same shape. */
     name: 'box of 5k rows',
     group: 'Read',
     level: 'raw',

@@ -21,30 +21,30 @@
           "scenario": "point read",
           "level": "raw",
           "iterations": 1000,
-          "heldKb": 635.181640625,
-          "allocPerCallKb": 17.1665205078125,
-          "sustainedKb": 8188.6015625,
-          "sustainedRssKb": 100400,
+          "heldKb": 448.009765625,
+          "allocPerCallKb": 16.2891552734375,
+          "sustainedKb": 7993.8359375,
+          "sustainedRssKb": 101440,
           "wireKb": 0.3882548828125,
           "wireOutKb": 0.0985361328125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 15.6866865234375,
-          "allocHiKb": 17.5253896484375
+          "allocLoKb": 15.9343974609375,
+          "allocHiKb": 17.6389580078125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "point read",
           "level": "raw",
           "iterations": 1000,
-          "heldKb": 748.7080078125,
-          "allocPerCallKb": 19.94411328125,
-          "sustainedKb": 8040.6923828125,
-          "sustainedRssKb": 99136,
+          "heldKb": 661.0673828125,
+          "allocPerCallKb": 19.92246875,
+          "sustainedKb": 7949.6533203125,
+          "sustainedRssKb": 100944,
           "wireKb": 0.179375,
           "wireOutKb": 0.0565439453125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 19.21086328125,
-          "allocHiKb": 20.21148828125
+          "allocLoKb": 19.5271259765625,
+          "allocHiKb": 20.4967890625
         },
         "heapPairs": 7,
         "heapWins": 0,
@@ -53,20 +53,20 @@
           "pairs": 7,
           "p": 0.015625000000000003
         },
-        "sustainedWins": 7
+        "sustainedWins": 6
       },
       "held": {
         "pg": {
           "client": "pg",
           "scenario": "point read",
-          "heldKb": 635.181640625,
-          "idleHeldKb": 640.8203125
+          "heldKb": 448.009765625,
+          "idleHeldKb": 436.328125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "point read",
-          "heldKb": 748.8876953125,
-          "idleHeldKb": 759.7265625
+          "heldKb": 661.0673828125,
+          "idleHeldKb": 674.6875
         }
       }
     },
@@ -91,30 +91,30 @@
           "scenario": "page of 100",
           "level": "raw",
           "iterations": 400,
-          "heldKb": 737.5390625,
-          "allocPerCallKb": 247.23062744140626,
-          "sustainedKb": 28991.658203125,
-          "sustainedRssKb": 145024,
+          "heldKb": 556.71875,
+          "allocPerCallKb": 235.36095947265625,
+          "sustainedKb": 29000.0224609375,
+          "sustainedRssKb": 142048,
           "wireKb": 15.0550048828125,
           "wireOutKb": 0.1169140625,
           "tracedPerCallKb": 0,
-          "allocLoKb": 244.9946875,
-          "allocHiKb": 248.44518798828125
+          "allocLoKb": 232.45181884765626,
+          "allocHiKb": 236.5963818359375
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "page of 100",
           "level": "raw",
           "iterations": 400,
-          "heldKb": 874.2490234375,
-          "allocPerCallKb": 157.47128173828125,
-          "sustainedKb": 8739.5263671875,
-          "sustainedRssKb": 99024,
+          "heldKb": 789.0771484375,
+          "allocPerCallKb": 156.77648681640625,
+          "sustainedKb": 8652.501953125,
+          "sustainedRssKb": 98784,
           "wireKb": 15.8388671875,
           "wireOutKb": 0.05734375,
           "tracedPerCallKb": 0,
-          "allocLoKb": 155.890390625,
-          "allocHiKb": 160.33329833984374
+          "allocLoKb": 155.57131103515624,
+          "allocHiKb": 158.16451904296875
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -129,14 +129,14 @@
         "pg": {
           "client": "pg",
           "scenario": "page of 100",
-          "heldKb": 732.5703125,
-          "idleHeldKb": 671.328125
+          "heldKb": 551.75,
+          "idleHeldKb": 473.1875
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "page of 100",
-          "heldKb": 874.2490234375,
-          "idleHeldKb": 834.40625
+          "heldKb": 789.0771484375,
+          "idleHeldKb": 749.234375
         }
       }
     },
@@ -161,30 +161,30 @@
           "scenario": "all 5000 rows",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 3509.2978515625,
-          "allocPerCallKb": 11117.09625,
-          "sustainedKb": 127945.4296875,
-          "sustainedRssKb": 290592,
+          "heldKb": 3334.8447265625,
+          "allocPerCallKb": 10640.921748046874,
+          "sustainedKb": 125332.8974609375,
+          "sustainedRssKb": 285232,
           "wireKb": 741.94287109375,
           "wireOutKb": 0.0948046875,
           "tracedPerCallKb": 0,
-          "allocLoKb": 10841.492177734375,
-          "allocHiKb": 11373.018134765625
+          "allocLoKb": 10505.914365234376,
+          "allocHiKb": 10720.2205859375
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "all 5000 rows",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 2984.7978515625,
-          "allocPerCallKb": 7045.8384765625,
-          "sustainedKb": 20062.435546875,
-          "sustainedRssKb": 126320,
+          "heldKb": 2893.4931640625,
+          "allocPerCallKb": 6997.206494140625,
+          "sustainedKb": 19962.763671875,
+          "sustainedRssKb": 126384,
           "wireKb": 791.62744140625,
           "wireOutKb": 0.0576953125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 6928.158359375,
-          "allocHiKb": 7098.524365234375
+          "allocLoKb": 6946.73970703125,
+          "allocHiKb": 7103.883203125
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -199,14 +199,14 @@
         "pg": {
           "client": "pg",
           "scenario": "all 5000 rows",
-          "heldKb": 3497.0712890625,
-          "idleHeldKb": 661.984375
+          "heldKb": 3334.1259765625,
+          "idleHeldKb": 472.5234375
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "all 5000 rows",
-          "heldKb": 2980.4462890625,
-          "idleHeldKb": 804.265625
+          "heldKb": 2877.4619140625,
+          "idleHeldKb": 714.90625
         }
       }
     },
@@ -231,30 +231,30 @@
           "scenario": "float8 spread over rows",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 1035.8369140625,
-          "allocPerCallKb": 1876.331533203125,
-          "sustainedKb": 44032.09765625,
-          "sustainedRssKb": 173200,
-          "wireKb": 137.5068359375,
+          "heldKb": 838.7587890625,
+          "allocPerCallKb": 1353.8628515625,
+          "sustainedKb": 33447.251953125,
+          "sustainedRssKb": 155888,
+          "wireKb": 137.6396484375,
           "wireOutKb": 0.0967578125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 1834.488427734375,
-          "allocHiKb": 1923.855556640625
+          "allocLoKb": 1342.557158203125,
+          "allocHiKb": 1384.840341796875
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "float8 spread over rows",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 1039.6650390625,
-          "allocPerCallKb": 1057.89986328125,
-          "sustainedKb": 8627.70703125,
-          "sustainedRssKb": 102128,
+          "heldKb": 948.2119140625,
+          "allocPerCallKb": 1032.7288671875,
+          "sustainedKb": 8366.3896484375,
+          "sustainedRssKb": 102704,
           "wireKb": 92.79150390625,
           "wireOutKb": 0.0420703125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 1037.21708984375,
-          "allocHiKb": 1138.878935546875
+          "allocLoKb": 997.08486328125,
+          "allocHiKb": 1153.512861328125
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -269,14 +269,14 @@
         "pg": {
           "client": "pg",
           "scenario": "float8 spread over rows",
-          "heldKb": 1003.8056640625,
-          "idleHeldKb": 614.3359375
+          "heldKb": 862.4541015625,
+          "idleHeldKb": 412.296875
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "float8 spread over rows",
-          "heldKb": 1039.6650390625,
-          "idleHeldKb": 752.703125
+          "heldKb": 955.0869140625,
+          "idleHeldKb": 668.125
         }
       }
     },
@@ -301,30 +301,30 @@
           "scenario": "float8 packed in one row",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 681.974609375,
-          "allocPerCallKb": 2822.630859375,
-          "sustainedKb": 19532.701171875,
-          "sustainedRssKb": 118224,
-          "wireKb": 88.701171875,
+          "heldKb": 444.89453125,
+          "allocPerCallKb": 2832.8238671875,
+          "sustainedKb": 19317.271484375,
+          "sustainedRssKb": 116992,
+          "wireKb": 88.833984375,
           "wireOutKb": 0.0987109375,
           "tracedPerCallKb": 0,
-          "allocLoKb": 2642.34123046875,
-          "allocHiKb": 2930.105625
+          "allocLoKb": 2797.883515625,
+          "allocHiKb": 2958.02423828125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "float8 packed in one row",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 754.203125,
-          "allocPerCallKb": 215.00416015625,
-          "sustainedKb": 11572.07421875,
-          "sustainedRssKb": 101696,
+          "heldKb": 700.078125,
+          "allocPerCallKb": 209.25123046875,
+          "sustainedKb": 11349.552734375,
+          "sustainedRssKb": 101168,
           "wireKb": 58.6484375,
           "wireOutKb": 0.039140625,
           "tracedPerCallKb": 0,
-          "allocLoKb": 207.4401953125,
-          "allocHiKb": 222.69509765625
+          "allocLoKb": 201.36169921875,
+          "allocHiKb": 210.76970703125
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -339,14 +339,14 @@
         "pg": {
           "client": "pg",
           "scenario": "float8 packed in one row",
-          "heldKb": 650.029296875,
-          "idleHeldKb": 594.0546875
+          "heldKb": 469.779296875,
+          "idleHeldKb": 392.90625
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "float8 packed in one row",
-          "heldKb": 728.78515625,
-          "idleHeldKb": 705.609375
+          "heldKb": 654.29296875,
+          "idleHeldKb": 623.1796875
         }
       }
     },
@@ -371,30 +371,30 @@
           "scenario": "int4[] of 100k",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 14.0791015625,
-          "allocPerCallKb": 23206.17341796875,
-          "sustainedKb": 81824.296875,
-          "sustainedRssKb": 252144,
+          "heldKb": -146.4365234375,
+          "allocPerCallKb": 23178.300361328125,
+          "sustainedKb": 81651.203125,
+          "sustainedRssKb": 245616,
           "wireKb": 1074.2861328125,
           "wireOutKb": 0.093837890625,
           "tracedPerCallKb": 0,
-          "allocLoKb": 21977.8678125,
-          "allocHiKb": 24684.763828125
+          "allocLoKb": 22554.6165625,
+          "allocHiKb": 24971.377900390624
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "int4[] of 100k",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 1512.6640625,
-          "allocPerCallKb": 2251.45173828125,
-          "sustainedKb": 16052.095703125,
-          "sustainedRssKb": 111664,
+          "heldKb": 1396.25,
+          "allocPerCallKb": 2250.5660546875,
+          "sustainedKb": 15838.291015625,
+          "sustainedRssKb": 110720,
           "wireKb": 781.3046875,
           "wireOutKb": 0.039140625,
           "tracedPerCallKb": 0,
-          "allocLoKb": 2236.664609375,
-          "allocHiKb": 2263.9466796875
+          "allocLoKb": 2238.3613671875,
+          "allocHiKb": 2266.31419921875
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -409,14 +409,14 @@
         "pg": {
           "client": "pg",
           "scenario": "int4[] of 100k",
-          "heldKb": 9.9306640625,
-          "idleHeldKb": -912.72265625
+          "heldKb": -114.5380859375,
+          "idleHeldKb": -1051.60546875
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "int4[] of 100k",
-          "heldKb": 1469.9140625,
-          "idleHeldKb": 693.4921875
+          "heldKb": 1396.1328125,
+          "idleHeldKb": 606.5
         }
       }
     },
@@ -441,30 +441,30 @@
           "scenario": "bytea of 4 MB",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 3284.919921875,
-          "allocPerCallKb": 52828.60626953125,
-          "sustainedKb": 81469.486328125,
-          "sustainedRssKb": 185936,
+          "heldKb": 3163.146484375,
+          "allocPerCallKb": 52873.9098046875,
+          "sustainedKb": 81337.423828125,
+          "sustainedRssKb": 187456,
           "wireKb": 8192.072265625,
           "wireOutKb": 0.096767578125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 52219.7353125,
-          "allocHiKb": 53074.67091796875
+          "allocLoKb": 52589.5173828125,
+          "allocHiKb": 53072.755546875
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "bytea of 4 MB",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 3351.630859375,
-          "allocPerCallKb": 4177.14220703125,
-          "sustainedKb": 11877.8125,
-          "sustainedRssKb": 109920,
+          "heldKb": 3286.857421875,
+          "allocPerCallKb": 4181.4653515625,
+          "sustainedKb": 11887.015625,
+          "sustainedRssKb": 111056,
           "wireKb": 4096.03515625,
           "wireOutKb": 0.039150390625,
           "tracedPerCallKb": 0,
-          "allocLoKb": 4165.5228125,
-          "allocHiKb": 4242.9245703125
+          "allocLoKb": 4118.15287109375,
+          "allocHiKb": 4282.7435546875
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -479,14 +479,14 @@
         "pg": {
           "client": "pg",
           "scenario": "bytea of 4 MB",
-          "heldKb": 3285.794921875,
-          "idleHeldKb": -831.48828125
+          "heldKb": 3131.193359375,
+          "idleHeldKb": -968.32421875
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "bytea of 4 MB",
-          "heldKb": 3364.802734375,
-          "idleHeldKb": -741.52734375
+          "heldKb": 3266.826171875,
+          "idleHeldKb": -820.78515625
         }
       }
     },
@@ -511,30 +511,30 @@
           "scenario": "uuid of 5k rows",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 1247.0048828125,
-          "allocPerCallKb": 2014.25853515625,
-          "sustainedKb": 62754.513671875,
-          "sustainedRssKb": 199712,
+          "heldKb": 1066.5595703125,
+          "allocPerCallKb": 1497.5666015625,
+          "sustainedKb": 45362.7392578125,
+          "sustainedRssKb": 175840,
           "wireKb": 229.52783203125,
           "wireOutKb": 0.09578125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 1950.295185546875,
-          "allocHiKb": 2050.164658203125
+          "allocLoKb": 1477.71107421875,
+          "allocHiKb": 1524.89271484375
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "uuid of 5k rows",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 1244.1728515625,
-          "allocPerCallKb": 1393.136025390625,
-          "sustainedKb": 16365.546875,
-          "sustainedRssKb": 117904,
+          "heldKb": 1158.3212890625,
+          "allocPerCallKb": 1337.176298828125,
+          "sustainedKb": 16360.1767578125,
+          "sustainedRssKb": 117328,
           "wireKb": 131.85009765625,
           "wireOutKb": 0.0420703125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 1351.327431640625,
-          "allocHiKb": 1423.603408203125
+          "allocLoKb": 1314.960166015625,
+          "allocHiKb": 1431.09955078125
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -549,14 +549,14 @@
         "pg": {
           "client": "pg",
           "scenario": "uuid of 5k rows",
-          "heldKb": 1240.3095703125,
-          "idleHeldKb": 619.453125
+          "heldKb": 1040.0556640625,
+          "idleHeldKb": 417.015625
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "uuid of 5k rows",
-          "heldKb": 1267.0712890625,
-          "idleHeldKb": 761.78125
+          "heldKb": 1166.4072265625,
+          "idleHeldKb": 677.1171875
         }
       }
     },
@@ -581,35 +581,35 @@
           "scenario": "box of 5k rows",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 1455.0888671875,
-          "allocPerCallKb": 2432.637919921875,
-          "sustainedKb": 58048.2099609375,
-          "sustainedRssKb": 193424,
-          "wireKb": 423.17822265625,
+          "heldKb": 1281.91796875,
+          "allocPerCallKb": 1947.3510546875,
+          "sustainedKb": 71810.75390625,
+          "sustainedRssKb": 244000,
+          "wireKb": 423.123046875,
           "wireOutKb": 0.09578125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 2394.910234375,
-          "allocHiKb": 2451.970927734375
+          "allocLoKb": 1924.89578125,
+          "allocHiKb": 1972.4750390625
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "box of 5k rows",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 1484.4248046875,
-          "allocPerCallKb": 2049.62466796875,
-          "sustainedKb": 18317.916015625,
-          "sustainedRssKb": 119504,
-          "wireKb": 423.14697265625,
+          "heldKb": 1390.03515625,
+          "allocPerCallKb": 2024.3818359375,
+          "sustainedKb": 18133.87109375,
+          "sustainedRssKb": 119568,
+          "wireKb": 423.091796875,
           "wireOutKb": 0.0420703125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 2015.19560546875,
-          "allocHiKb": 2061.983154296875
+          "allocLoKb": 1989.8543359375,
+          "allocHiKb": 2027.321171875
         },
         "heapPairs": 7,
-        "heapWins": 7,
+        "heapWins": 0,
         "heapSign": {
-          "wins": 7,
+          "wins": 0,
           "pairs": 7,
           "p": 0.015625000000000003
         },
@@ -619,14 +619,14 @@
         "pg": {
           "client": "pg",
           "scenario": "box of 5k rows",
-          "heldKb": 1435.2060546875,
-          "idleHeldKb": 638.84375
+          "heldKb": 1291.88671875,
+          "idleHeldKb": 435.1015625
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "box of 5k rows",
-          "heldKb": 1474.6279296875,
-          "idleHeldKb": 775.3671875
+          "heldKb": 1399.36328125,
+          "idleHeldKb": 685.2265625
         }
       }
     },
@@ -651,30 +651,30 @@
           "scenario": "insert one row",
           "level": "raw",
           "iterations": 1000,
-          "heldKb": 526.8408203125,
-          "allocPerCallKb": 8.8027548828125,
-          "sustainedKb": 8260.2392578125,
-          "sustainedRssKb": 97952,
+          "heldKb": 346.2236328125,
+          "allocPerCallKb": 8.7044833984375,
+          "sustainedKb": 8067.9736328125,
+          "sustainedRssKb": 98528,
           "wireKb": 0.0361328125,
           "wireOutKb": 0.104392578125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 8.2395400390625,
-          "allocHiKb": 10.0399423828125
+          "allocLoKb": 8.276169921875,
+          "allocHiKb": 8.9718486328125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "insert one row",
           "level": "raw",
           "iterations": 1000,
-          "heldKb": 644.0498046875,
-          "allocPerCallKb": 15.8779501953125,
-          "sustainedKb": 8140.67578125,
-          "sustainedRssKb": 99104,
+          "heldKb": 556.6748046875,
+          "allocPerCallKb": 15.3540966796875,
+          "sustainedKb": 8333.01171875,
+          "sustainedRssKb": 99984,
           "wireKb": 0.0263671875,
           "wireOutKb": 0.041892578125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 15.0759765625,
-          "allocHiKb": 16.6357861328125
+          "allocLoKb": 15.057921875,
+          "allocHiKb": 16.2577451171875
         },
         "heapPairs": 7,
         "heapWins": 0,
@@ -683,20 +683,20 @@
           "pairs": 7,
           "p": 0.015625000000000003
         },
-        "sustainedWins": 5
+        "sustainedWins": 1
       },
       "held": {
         "pg": {
           "client": "pg",
           "scenario": "insert one row",
-          "heldKb": 526.8408203125,
-          "idleHeldKb": 550.2734375
+          "heldKb": 346.0205078125,
+          "idleHeldKb": 347.3828125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "insert one row",
-          "heldKb": 644.0498046875,
-          "idleHeldKb": 663.1328125
+          "heldKb": 556.6748046875,
+          "idleHeldKb": 578.5390625
         }
       }
     },
@@ -721,30 +721,30 @@
           "scenario": "insert 500 rows",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 594.8349609375,
-          "allocPerCallKb": 959.264248046875,
-          "sustainedKb": 21542.990234375,
-          "sustainedRssKb": 120176,
+          "heldKb": 414.4208984375,
+          "allocPerCallKb": 958.562841796875,
+          "sustainedKb": 21424.896484375,
+          "sustainedRssKb": 119984,
           "wireKb": 0.0380859375,
           "wireOutKb": 68.2744921875,
           "tracedPerCallKb": 0,
-          "allocLoKb": 948.691064453125,
-          "allocHiKb": 969.775478515625
+          "allocLoKb": 937.551552734375,
+          "allocHiKb": 969.333056640625
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "insert 500 rows",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 851.3095703125,
-          "allocPerCallKb": 1234.1980859375,
-          "sustainedKb": 16175.89453125,
-          "sustainedRssKb": 116032,
+          "heldKb": 737.1689453125,
+          "allocPerCallKb": 1233.5992578125,
+          "sustainedKb": 16148.04296875,
+          "sustainedRssKb": 115936,
           "wireKb": 0.0283203125,
           "wireOutKb": 51.6826953125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 1209.6771484375,
-          "allocHiKb": 1237.0042578125
+          "allocLoKb": 1209.538671875,
+          "allocHiKb": 1236.5595703125
         },
         "heapPairs": 7,
         "heapWins": 0,
@@ -759,14 +759,14 @@
         "pg": {
           "client": "pg",
           "scenario": "insert 500 rows",
-          "heldKb": 595.0146484375,
-          "idleHeldKb": 616.7890625
+          "heldKb": 414.1787109375,
+          "idleHeldKb": 415.5390625
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "insert 500 rows",
-          "heldKb": 851.2861328125,
-          "idleHeldKb": 799.1484375
+          "heldKb": 737.1689453125,
+          "idleHeldKb": 706.5078125
         }
       }
     },
@@ -791,30 +791,30 @@
           "scenario": "write a 100k int4[]",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 531.3798828125,
-          "allocPerCallKb": 27902.8095703125,
-          "sustainedKb": 62614.43359375,
-          "sustainedRssKb": 202848,
+          "heldKb": 356.0517578125,
+          "allocPerCallKb": 27899.3837109375,
+          "sustainedKb": 62417.26953125,
+          "sustainedRssKb": 202240,
           "wireKb": 0.0361328125,
           "wireOutKb": 1269.654287109375,
           "tracedPerCallKb": 0,
-          "allocLoKb": 27900.0940234375,
-          "allocHiKb": 27927.426064453124
+          "allocLoKb": 27899.0190234375,
+          "allocHiKb": 27924.784814453124
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "write a 100k int4[]",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 1880.2607421875,
-          "allocPerCallKb": 28727.670439453126,
-          "sustainedKb": 67179.87890625,
-          "sustainedRssKb": 215920,
+          "heldKb": 1799.0576171875,
+          "allocPerCallKb": 28725.871845703125,
+          "sustainedKb": 67543.20703125,
+          "sustainedRssKb": 223040,
           "wireKb": 0.0263671875,
           "wireOutKb": 1269.579091796875,
           "tracedPerCallKb": 0,
-          "allocLoKb": 28675.3078515625,
-          "allocHiKb": 28729.904736328124
+          "allocLoKb": 28650.521064453125,
+          "allocHiKb": 28726.963173828124
         },
         "heapPairs": 7,
         "heapWins": 0,
@@ -829,14 +829,14 @@
         "pg": {
           "client": "pg",
           "scenario": "write a 100k int4[]",
-          "heldKb": 531.3798828125,
-          "idleHeldKb": 554.1953125
+          "heldKb": 355.8095703125,
+          "idleHeldKb": 357.3125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "write a 100k int4[]",
-          "heldKb": 1880.7216796875,
-          "idleHeldKb": 627.75
+          "heldKb": 1785.5185546875,
+          "idleHeldKb": 532.546875
         }
       }
     },
@@ -861,30 +861,30 @@
           "scenario": "twenty inserts in a transaction",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 649.751953125,
-          "allocPerCallKb": 175.124306640625,
-          "sustainedKb": 8257.662109375,
-          "sustainedRssKb": 99104,
+          "heldKb": 467.369140625,
+          "allocPerCallKb": 167.03673828125,
+          "sustainedKb": 8069.49609375,
+          "sustainedRssKb": 98784,
           "wireKb": 0.7568359375,
           "wireOutKb": 2.1397265625,
           "tracedPerCallKb": 0,
-          "allocLoKb": 165.073984375,
-          "allocHiKb": 181.0798828125
+          "allocLoKb": 158.530908203125,
+          "allocHiKb": 173.642451171875
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "twenty inserts in a transaction",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 813.5771484375,
-          "allocPerCallKb": 309.121533203125,
-          "sustainedKb": 7978.9794921875,
-          "sustainedRssKb": 98816,
+          "heldKb": 728.4521484375,
+          "allocPerCallKb": 302.2078515625,
+          "sustainedKb": 7914.130859375,
+          "sustainedRssKb": 99120,
           "wireKb": 0.5712890625,
           "wireOutKb": 0.93171875,
           "tracedPerCallKb": 0,
-          "allocLoKb": 301.523408203125,
-          "allocHiKb": 314.220810546875
+          "allocLoKb": 300.96818359375,
+          "allocHiKb": 310.774658203125
         },
         "heapPairs": 7,
         "heapWins": 0,
@@ -899,14 +899,14 @@
         "pg": {
           "client": "pg",
           "scenario": "twenty inserts in a transaction",
-          "heldKb": 649.751953125,
-          "idleHeldKb": 658.75
+          "heldKb": 467.369140625,
+          "idleHeldKb": 469.75
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "twenty inserts in a transaction",
-          "heldKb": 813.5771484375,
-          "idleHeldKb": 813.125
+          "heldKb": 728.4521484375,
+          "idleHeldKb": 722.5703125
         }
       }
     },
@@ -931,30 +931,30 @@
           "scenario": "concurrent reads",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 992.888671875,
-          "allocPerCallKb": 306.564443359375,
-          "sustainedKb": 8554.4658203125,
-          "sustainedRssKb": 104592,
+          "heldKb": 942.404296875,
+          "allocPerCallKb": 305.511748046875,
+          "sustainedKb": 8494.91015625,
+          "sustainedRssKb": 104416,
           "wireKb": 7.818095703125,
           "wireOutKb": 1.981455078125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 300.66841796875,
-          "allocHiKb": 310.01431640625
+          "allocLoKb": 298.356845703125,
+          "allocHiKb": 311.287646484375
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "concurrent reads",
           "level": "raw",
           "iterations": 100,
-          "heldKb": 1327.8046875,
-          "allocPerCallKb": 461.93390625,
-          "sustainedKb": 10446.6328125,
-          "sustainedRssKb": 105280,
+          "heldKb": 1322.609375,
+          "allocPerCallKb": 457.5905078125,
+          "sustainedKb": 10294.00390625,
+          "sustainedRssKb": 104416,
           "wireKb": 3.6296875,
           "wireOutKb": 1.141611328125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 459.231875,
-          "allocHiKb": 470.974921875
+          "allocLoKb": 452.25765625,
+          "allocHiKb": 465.3980078125
         },
         "heapPairs": 7,
         "heapWins": 0,
@@ -969,14 +969,14 @@
         "pg": {
           "client": "pg",
           "scenario": "concurrent reads",
-          "heldKb": 992.787109375,
-          "idleHeldKb": 946.40625
+          "heldKb": 942.154296875,
+          "idleHeldKb": 895.7578125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "concurrent reads",
-          "heldKb": 1327.984375,
-          "idleHeldKb": 1267.921875
+          "heldKb": 1322.65625,
+          "idleHeldKb": 1262.59375
         }
       }
     },
@@ -1001,30 +1001,30 @@
           "scenario": "findOneBy",
           "level": "orm",
           "iterations": 1000,
-          "heldKb": 1550.4404296875,
-          "allocPerCallKb": 64.375224609375,
-          "sustainedKb": 16076.0849609375,
-          "sustainedRssKb": 124688,
+          "heldKb": 1241.9013671875,
+          "allocPerCallKb": 64.2910166015625,
+          "sustainedKb": 15820.771484375,
+          "sustainedRssKb": 125088,
           "wireKb": 0.4673564453125,
           "wireOutKb": 0.4803720703125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 63.5635361328125,
-          "allocHiKb": 65.06991015625
+          "allocLoKb": 63.6107587890625,
+          "allocHiKb": 64.6767509765625
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "findOneBy",
           "level": "orm",
           "iterations": 1000,
-          "heldKb": 1616.9814453125,
-          "allocPerCallKb": 70.762486328125,
-          "sustainedKb": 11035.4189453125,
-          "sustainedRssKb": 113008,
+          "heldKb": 1469.1845703125,
+          "allocPerCallKb": 69.9479228515625,
+          "sustainedKb": 10849.0205078125,
+          "sustainedRssKb": 114048,
           "wireKb": 0.179375,
           "wireOutKb": 0.0565439453125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 69.782244140625,
-          "allocHiKb": 71.958908203125
+          "allocLoKb": 69.4528994140625,
+          "allocHiKb": 71.020884765625
         },
         "heapPairs": 7,
         "heapWins": 0,
@@ -1039,14 +1039,14 @@
         "pg": {
           "client": "pg",
           "scenario": "findOneBy",
-          "heldKb": 1550.4404296875,
-          "idleHeldKb": 1553.40625
+          "heldKb": 1241.8232421875,
+          "idleHeldKb": 1228.75
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "findOneBy",
-          "heldKb": 1616.9814453125,
-          "idleHeldKb": 1631.28125
+          "heldKb": 1469.1845703125,
+          "idleHeldKb": 1482.5078125
         }
       }
     },
@@ -1071,30 +1071,30 @@
           "scenario": "find 100 entities",
           "level": "orm",
           "iterations": 400,
-          "heldKb": 1543.5615234375,
-          "allocPerCallKb": 427.119873046875,
-          "sustainedKb": 33690.400390625,
-          "sustainedRssKb": 149168,
+          "heldKb": 1234.9912109375,
+          "allocPerCallKb": 401.73308349609374,
+          "sustainedKb": 32728.1533203125,
+          "sustainedRssKb": 148832,
           "wireKb": 15.1243408203125,
           "wireOutKb": 0.4440625,
           "tracedPerCallKb": 0,
-          "allocLoKb": 403.3985913085937,
-          "allocHiKb": 433.146083984375
+          "allocLoKb": 398.2606567382812,
+          "allocHiKb": 428.51200927734374
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "find 100 entities",
           "level": "orm",
           "iterations": 400,
-          "heldKb": 1860.3818359375,
-          "allocPerCallKb": 316.2722314453125,
-          "sustainedKb": 10646.3837890625,
-          "sustainedRssKb": 100144,
+          "heldKb": 1711.2724609375,
+          "allocPerCallKb": 317.77146240234373,
+          "sustainedKb": 10364.642578125,
+          "sustainedRssKb": 100160,
           "wireKb": 15.8388671875,
           "wireOutKb": 0.0486767578125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 314.3487231445313,
-          "allocHiKb": 319.53832275390624
+          "allocLoKb": 309.0116259765625,
+          "allocHiKb": 321.1029833984375
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -1109,14 +1109,14 @@
         "pg": {
           "client": "pg",
           "scenario": "find 100 entities",
-          "heldKb": 1571.3896484375,
-          "idleHeldKb": 1490.203125
+          "heldKb": 1261.0693359375,
+          "idleHeldKb": 1168.2734375
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "find 100 entities",
-          "heldKb": 1860.3818359375,
-          "idleHeldKb": 1820.2578125
+          "heldKb": 1711.2724609375,
+          "idleHeldKb": 1670.171875
         }
       }
     },
@@ -1141,30 +1141,30 @@
           "scenario": "find 5000 entities",
           "level": "orm",
           "iterations": 100,
-          "heldKb": 4280.9228515625,
-          "allocPerCallKb": 16884.62947265625,
-          "sustainedKb": 143234.609375,
-          "sustainedRssKb": 314656,
+          "heldKb": 3937.2197265625,
+          "allocPerCallKb": 16427.691328125,
+          "sustainedKb": 140534.91796875,
+          "sustainedRssKb": 311648,
           "wireKb": 742.0869140625,
           "wireOutKb": 0.405361328125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 16624.324775390625,
-          "allocHiKb": 17080.489853515624
+          "allocLoKb": 16155.4083203125,
+          "allocHiKb": 17067.955078125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "find 5000 entities",
           "level": "orm",
           "iterations": 100,
-          "heldKb": 3889.32421875,
-          "allocPerCallKb": 11356.3007421875,
-          "sustainedKb": 135052.7421875,
-          "sustainedRssKb": 306832,
+          "heldKb": 3742.56640625,
+          "allocPerCallKb": 11323.4018359375,
+          "sustainedKb": 133933.54296875,
+          "sustainedRssKb": 304688,
           "wireKb": 791.70703125,
           "wireOutKb": 0.0479296875,
           "tracedPerCallKb": 0,
-          "allocLoKb": 10786.144609375,
-          "allocHiKb": 11710.64515625
+          "allocLoKb": 11156.595546875,
+          "allocHiKb": 11717.4679296875
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -1173,20 +1173,20 @@
           "pairs": 7,
           "p": 0.015625000000000003
         },
-        "sustainedWins": 7
+        "sustainedWins": 4
       },
       "held": {
         "pg": {
           "client": "pg",
           "scenario": "find 5000 entities",
-          "heldKb": 4294.0478515625,
-          "idleHeldKb": 1428.5234375
+          "heldKb": 3954.2900390625,
+          "idleHeldKb": 1099.6875
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "find 5000 entities",
-          "heldKb": 3884.01171875,
-          "idleHeldKb": 1555.53125
+          "heldKb": 3727.08203125,
+          "idleHeldKb": 1405.7421875
         }
       }
     },
@@ -1211,30 +1211,30 @@
           "scenario": "queryBuilder, 500 entities",
           "level": "orm",
           "iterations": 200,
-          "heldKb": 1805.755859375,
-          "allocPerCallKb": 1752.423994140625,
-          "sustainedKb": 68402.41015625,
-          "sustainedRssKb": 218928,
+          "heldKb": 1491.474609375,
+          "allocPerCallKb": 1772.806484375,
+          "sustainedKb": 67824.873046875,
+          "sustainedRssKb": 219056,
           "wireKb": 72.140625,
           "wireOutKb": 0.3633203125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 1728.883173828125,
-          "allocHiKb": 1810.825712890625
+          "allocLoKb": 1730.698349609375,
+          "allocHiKb": 1815.01328125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "queryBuilder, 500 entities",
           "level": "orm",
           "iterations": 200,
-          "heldKb": 1868.7978515625,
-          "allocPerCallKb": 1094.451171875,
-          "sustainedKb": 10583.91796875,
-          "sustainedRssKb": 103440,
+          "heldKb": 1729.6025390625,
+          "allocPerCallKb": 1076.9728466796876,
+          "sustainedKb": 10452.91015625,
+          "sustainedRssKb": 102928,
           "wireKb": 77.37158203125,
           "wireOutKb": 0.055703125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 1073.9557470703126,
-          "allocHiKb": 1133.2649658203125
+          "allocLoKb": 1063.6074951171875,
+          "allocHiKb": 1148.9498193359375
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -1249,14 +1249,14 @@
         "pg": {
           "client": "pg",
           "scenario": "queryBuilder, 500 entities",
-          "heldKb": 1805.552734375,
-          "idleHeldKb": 1507.5078125
+          "heldKb": 1480.607421875,
+          "idleHeldKb": 1180.03125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "queryBuilder, 500 entities",
-          "heldKb": 1856.3056640625,
-          "idleHeldKb": 1626.5
+          "heldKb": 1737.2744140625,
+          "idleHeldKb": 1479.8203125
         }
       }
     },
@@ -1281,30 +1281,30 @@
           "scenario": "findOne with a 4 MB bytea",
           "level": "orm",
           "iterations": 100,
-          "heldKb": 4070.0400390625,
-          "allocPerCallKb": 52918.83412109375,
-          "sustainedKb": 82574.5126953125,
-          "sustainedRssKb": 179328,
+          "heldKb": 3830.8525390625,
+          "allocPerCallKb": 52809.75583984375,
+          "sustainedKb": 82215.4970703125,
+          "sustainedRssKb": 174192,
           "wireKb": 8192.1220703125,
           "wireOutKb": 0.230556640625,
           "tracedPerCallKb": 0,
-          "allocLoKb": 52541.824013671874,
-          "allocHiKb": 52989.77485351563
+          "allocLoKb": 52175.81866210938,
+          "allocHiKb": 53088.8789453125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "findOne with a 4 MB bytea",
           "level": "orm",
           "iterations": 100,
-          "heldKb": 4140.685546875,
-          "allocPerCallKb": 4234.2751171875,
-          "sustainedKb": 12811.3046875,
-          "sustainedRssKb": 110928,
+          "heldKb": 4028.107421875,
+          "allocPerCallKb": 4211.97419921875,
+          "sustainedKb": 12570.125,
+          "sustainedRssKb": 111616,
           "wireKb": 4096.04296875,
           "wireOutKb": 0.039150390625,
           "tracedPerCallKb": 0,
-          "allocLoKb": 4206.71783203125,
-          "allocHiKb": 4262.59708984375
+          "allocLoKb": 4190.7725390625,
+          "allocHiKb": 4249.39779296875
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -1319,14 +1319,14 @@
         "pg": {
           "client": "pg",
           "scenario": "findOne with a 4 MB bytea",
-          "heldKb": 4070.2587890625,
-          "idleHeldKb": -45.51953125
+          "heldKb": 3830.7275390625,
+          "idleHeldKb": -302.62890625
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "findOne with a 4 MB bytea",
-          "heldKb": 4108.779296875,
-          "idleHeldKb": 22.45703125
+          "heldKb": 4032.912109375,
+          "idleHeldKb": -85.26171875
         }
       }
     },
@@ -1351,30 +1351,30 @@
           "scenario": "findOne with a 100k int4[]",
           "level": "orm",
           "iterations": 100,
-          "heldKb": 974.4013671875,
-          "allocPerCallKb": 23649.582236328126,
-          "sustainedKb": 82706.06640625,
-          "sustainedRssKb": 248800,
+          "heldKb": 648.7607421875,
+          "allocPerCallKb": 25380.61994140625,
+          "sustainedKb": 82411.51171875,
+          "sustainedRssKb": 248048,
           "wireKb": 1074.3427734375,
           "wireOutKb": 0.236416015625,
           "tracedPerCallKb": 0,
-          "allocLoKb": 21410.303818359374,
-          "allocHiKb": 26555.715283203124
+          "allocLoKb": 22192.340771484374,
+          "allocHiKb": 30071.932255859374
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "findOne with a 100k int4[]",
           "level": "orm",
           "iterations": 100,
-          "heldKb": 2329.546875,
-          "allocPerCallKb": 2295.87923828125,
-          "sustainedKb": 16560.751953125,
-          "sustainedRssKb": 111552,
+          "heldKb": 2189.40625,
+          "allocPerCallKb": 2291.97865234375,
+          "sustainedKb": 16248.68359375,
+          "sustainedRssKb": 111472,
           "wireKb": 781.3125,
           "wireOutKb": 0.039140625,
           "tracedPerCallKb": 0,
-          "allocLoKb": 2286.64923828125,
-          "allocHiKb": 2306.1321875
+          "allocLoKb": 2283.46853515625,
+          "allocHiKb": 2312.43087890625
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -1389,14 +1389,14 @@
         "pg": {
           "client": "pg",
           "scenario": "findOne with a 100k int4[]",
-          "heldKb": 970.0107421875,
-          "idleHeldKb": 84.66015625
+          "heldKb": 563.3310546875,
+          "idleHeldKb": -375.58203125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "findOne with a 100k int4[]",
-          "heldKb": 2297.796875,
-          "idleHeldKb": 1520.875
+          "heldKb": 2189.40625,
+          "idleHeldKb": 1379.5078125
         }
       }
     },
@@ -1421,30 +1421,30 @@
           "scenario": "save one entity",
           "level": "orm",
           "iterations": 1000,
-          "heldKb": 1623.814453125,
-          "allocPerCallKb": 79.410365234375,
-          "sustainedKb": 16960.849609375,
-          "sustainedRssKb": 125744,
-          "wireKb": 0.1220703125,
-          "wireOutKb": 0.1747060546875,
+          "heldKb": 1314.806640625,
+          "allocPerCallKb": 78.5539541015625,
+          "sustainedKb": 16041.12109375,
+          "sustainedRssKb": 126704,
+          "wireKb": 0.12109375,
+          "wireOutKb": 0.174705078125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 78.0748466796875,
-          "allocHiKb": 80.735513671875
+          "allocLoKb": 77.566072265625,
+          "allocHiKb": 78.69806640625
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "save one entity",
           "level": "orm",
           "iterations": 1000,
-          "heldKb": 1756.9912109375,
-          "allocPerCallKb": 102.629138671875,
-          "sustainedKb": 11829.998046875,
-          "sustainedRssKb": 115808,
+          "heldKb": 1607.6474609375,
+          "allocPerCallKb": 102.1244677734375,
+          "sustainedKb": 11694.361328125,
+          "sustainedRssKb": 116064,
           "wireKb": 0.0966796875,
           "wireOutKb": 0.106345703125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 101.220373046875,
-          "allocHiKb": 103.019119140625
+          "allocLoKb": 101.122271484375,
+          "allocHiKb": 102.969716796875
         },
         "heapPairs": 7,
         "heapWins": 0,
@@ -1459,19 +1459,19 @@
         "pg": {
           "client": "pg",
           "scenario": "save one entity",
-          "heldKb": 1623.994140625,
-          "idleHeldKb": 1643.3984375
+          "heldKb": 1314.603515625,
+          "idleHeldKb": 1317.34375
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "save one entity",
-          "heldKb": 1771.6083984375,
-          "idleHeldKb": 1774.1875
+          "heldKb": 1607.6474609375,
+          "idleHeldKb": 1625.6875
         }
       }
     }
   },
-  "measuredAt": "2026-10-05T11:48:45.775Z",
+  "measuredAt": "2026-10-05T12:09:01.256Z",
   "node": "v24.15.0",
   "prepare": "default (cached per connection)",
   "heapPairs": 7,
