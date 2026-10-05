@@ -22,6 +22,10 @@ export const SEED_ROWS = 5000;
 
 /** Built once, so a write scenario times the send and not the making. */
 export const BLOB_4MB = Buffer.alloc(4 * 1024 * 1024, 0x78);
+export const ARRAY_100K = Array.from(
+  { length: 100000 },
+  (_, i) => 2147383646 + i,
+);
 
 export const CONN = {
   host: process.env.PGHOST ?? '127.0.0.1',
@@ -93,6 +97,25 @@ export const DDL = [
   `create table ${SCHEMA}.float_array as
      select array_agg(v) as v from ${SCHEMA}.floats`,
 
+  // Two scalar types that disagree about what binary is worth, 5000 rows
+  // each. `uuid` is sixteen bytes against thirty-six characters, so binary
+  // is shorter; `box` is four float8s against however many digits the
+  // coordinates need. Which way that falls decides the row, and quoting only
+  // one of them would be choosing the answer.
+  //
+  // `box` measures something different here than in a dialect that lets
+  // PostgreJS decode it: this facade asks for the geometric family as text
+  // (`pg` returns strings for it), so both sides parse text and what is
+  // compared is the row machinery rather than a decoder.
+  `drop table if exists ${SCHEMA}.uuids`,
+  `create table ${SCHEMA}.uuids as
+     select gen_random_uuid() as v from generate_series(1, 5000) i`,
+  `drop table if exists ${SCHEMA}.boxes`,
+  `create table ${SCHEMA}.boxes as
+     select box(point(random() * 1e6, random() * 1e6),
+                point(random() * 1e6, random() * 1e6)) as v
+     from generate_series(1, 5000) i`,
+
   // A 100k int4[] in one row. `pg` reads it as text and has to materialise
   // the whole array literal as one string before it can parse it.
   `drop table if exists ${SCHEMA}.arrays`,
@@ -138,7 +161,14 @@ export const DDL = [
   // hide what is not.
   `drop table if exists ${SCHEMA}.writes`,
   `create unlogged table ${SCHEMA}.writes (
-     id serial primary key, name text, blob bytea
+     id serial primary key,
+     name text,
+     email text,
+     age integer,
+     balance numeric(20,6),
+     tags text[],
+     blob bytea,
+     numbers integer[]
    )`,
 ];
 
@@ -323,6 +353,55 @@ export const SCENARIOS = [
       q(db, `select large from ${SCHEMA}.blobs limit $1`, [1 + (i % 1)]),
   },
   {
+    name: 'uuid of 5k rows',
+    group: 'Read',
+    level: 'raw',
+    note: '5000 rows of 1 value, sixteen bytes against thirty-six characters',
+    iters: 5,
+    pairs: 61,
+    run: (db, i) =>
+      q(db, `select v from ${SCHEMA}.uuids limit $1`, [5000 - (i % 2)]),
+  },
+  {
+    /* Comes out level, and that is the result rather than a dull row: the
+     * socket counter reads 423 KB in on both sides, the identical bytes,
+     * because this facade asks for the whole geometric family as text -
+     * `pg` returns strings for it, so matching `pg` means giving up the
+     * decoder. The row prices that entry in the `fetchAsString` list. A
+     * dialect that lets PostgreJS decode `box` measures 1.87x on the same
+     * shape. */
+    name: 'box of 5k rows',
+    group: 'Read',
+    level: 'raw',
+    note: '5000 rows of 1 value, asked for as text on both sides',
+    iters: 5,
+    pairs: 61,
+    run: (db, i) =>
+      q(db, `select v from ${SCHEMA}.boxes limit $1`, [5000 - (i % 2)]),
+  },
+  {
+    /* The shape a web application under load actually has, and the only one
+     * here where the pool is doing anything. This facade serialises
+     * statements *per client* to match `pg` - see `src/client.ts` - so what
+     * is compared is the pool handing out ten connections, not either
+     * client's pipelining. */
+    name: 'concurrent reads',
+    group: 'Read',
+    level: 'raw',
+    note: '20 reads at once of 1 row each, pool of 10',
+    iters: 4,
+    pairs: 61,
+    pooled: true,
+    run: (db, i) =>
+      Promise.all(
+        Array.from({ length: 20 }, (_, k) =>
+          q(db, `select * from ${SCHEMA}.rows where id = $1`, [
+            ((i * 20 + k) % SEED_ROWS) + 1,
+          ]),
+        ),
+      ),
+  },
+  {
     name: 'insert one row',
     group: 'Write',
     level: 'raw',
@@ -331,6 +410,85 @@ export const SCENARIOS = [
     pairs: 401,
     run: (db, i) =>
       q(db, `insert into ${SCHEMA}.writes (name) values ($1)`, [`n${i}`]),
+  },
+  {
+    /* Nothing else here binds more than two parameters, and rendering them is
+     * a thing this facade does itself: every value goes through `pg`'s own
+     * `prepareValue` before it is bound. 2500 of them is where that shows. */
+    name: 'insert 500 rows',
+    group: 'Write',
+    level: 'raw',
+    note: '500 rows in 1 statement, 2500 parameters',
+    iters: 5,
+    pairs: 61,
+    run: (db, i) => {
+      const values = [];
+      const params = [];
+      for (let k = 0; k < 500; k++) {
+        const n = k * 5;
+        values.push(`($${n + 1}, $${n + 2}, $${n + 3}, $${n + 4}, $${n + 5})`);
+        params.push(
+          `name-${i}-${k}`.padEnd(40, 'x'),
+          `e${k}@example.com`,
+          (k % 60) + 18,
+          '12.345678',
+          ['a', 'b'],
+        );
+      }
+      return q(
+        db,
+        `insert into ${SCHEMA}.writes (name, email, age, balance, tags)
+           values ${values.join(',')}`,
+        params,
+      );
+    },
+  },
+  {
+    /* Comes out level, and for the same kind of reason as `box` above: the
+     * socket counter reads 1270 KB out on *both* sides, byte for byte. Every
+     * parameter here goes through `pg`'s own `prepareValue` and then out
+     * under OID 0 - the policy that makes a parameter behave exactly as
+     * `pg`'s does, documented in CLAUDE.md and `src/params.ts` - so a JS
+     * array becomes the same array literal `pg` would have sent. This row is
+     * what that costs: a dialect that lets PostgreJS encode the array
+     * measures 1.38x and 94% less allocated on the same shape. It is the
+     * send-side counterpart of the `int4[]` read, which is 4x the other way
+     * because *reading* is where this facade keeps the binary form. */
+    name: 'write a 100k int4[]',
+    group: 'Write',
+    level: 'raw',
+    note: '1 parameter holding 100 000 values, text on both sides',
+    iters: 3,
+    pairs: 41,
+    run: (db, i) =>
+      q(db, `insert into ${SCHEMA}.writes (name, numbers) values ($1, $2)`, [
+        `a${i}`,
+        ARRAY_100K,
+      ]),
+  },
+  {
+    /* Twenty round trips under one BEGIN. Nothing else here measures what a
+     * transaction costs, and it is most of what an ORM does. */
+    name: 'twenty inserts in a transaction',
+    group: 'Write',
+    level: 'raw',
+    note: '20 rows, one statement each, inside one transaction',
+    iters: 3,
+    pairs: 61,
+    run: async (db, i) => {
+      const client = await db.connect();
+      try {
+        await client.query('begin');
+        for (let k = 0; k < 20; k++)
+          await client.query(
+            `insert into ${SCHEMA}.writes (name) values ($1)`,
+            [`t${i}-${k}`],
+          );
+        await client.query('commit');
+      } finally {
+        client.release();
+      }
+    },
   },
   {
     name: 'write a 4 MB bytea',
