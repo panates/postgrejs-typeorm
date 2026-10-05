@@ -137,59 +137,58 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
     }
   };
 
-  /**
-   * **The three shapes this package deliberately answers differently, and
-   * both halves of each.**
-   *
-   * `pg` is the oracle everywhere else in this file and that is the point of
-   * the file. These are where it stopped being one: parameters go out typed
-   * by PostgreJS now (`src/params.ts`), and on a parameter with no context
-   * to be resolved from, a declared type is information `pg` throws away.
-   * `select $1` with `12` is the shape - `pg` hands back the string `'12'`
-   * because it never told the server what it was sending.
-   *
-   * Pinning both sides rather than skipping the case is the whole value
-   * here: a change on either side still fails, so this records a decision
-   * rather than excusing a difference. The day `pg` starts answering `12`,
-   * or this package stops, a test says so.
-   */
-  const INTENDED: Record<string, { pg: string; ours: string }> = {
-    'bare parameter, integer': { pg: 'ok:string:12', ours: 'ok:number:12' },
-    'bare parameter, boolean': {
-      pg: 'ok:string:true',
-      ours: 'ok:boolean:true',
-    },
-    // pg cannot multiply a parameter it declined to type; we can.
-    'arithmetic on an undeclared parameter': {
-      pg: 'err:22P02',
-      ours: 'ok:string:3.0',
-    },
-  };
-
   for (const [label, sql, values] of CASES) {
     it(label, async () => {
       const expected = await run(control as any, sql, values);
       const actual = await run(facade as any, sql, values);
-      const intended = INTENDED[label];
-      if (intended) {
-        assert.strictEqual(expected, intended.pg, `${label}: pg moved`);
-        assert.strictEqual(actual, intended.ours, `${label}: we moved`);
-        return;
-      }
       assert.strictEqual(actual, expected, `${label}: ${sql}`);
     });
   }
 
-  it('diverges from pg on exactly the shapes it says it does', () => {
-    // So a divergence cannot be added by editing one map: every key here
-    // has to be a case this file actually runs, and the count is stated.
-    const labels = new Set(CASES.map(([l]) => l));
-    for (const key of Object.keys(INTENDED))
-      assert.ok(
-        labels.has(key),
-        `INTENDED names a case that is not run: ${key}`,
-      );
-    assert.strictEqual(Object.keys(INTENDED).length, 3);
+  /**
+   * **Why `inferParameterTypes` is off by default, as an executable fact
+   * rather than a paragraph.**
+   *
+   * Letting PostgreJS type each parameter was tried on 2026-10-06, after
+   * `341f343` closed the last value it got wrong where `pg` got it right.
+   * The live matrix agreed with `pg` on everything but three shapes, the
+   * differential suite was untouched - and TypeORM's own functional suite
+   * went from 806/806 to **739/806**. The same checkout with this default
+   * restored is 806/806, so the sixty-seven are the policy and nothing
+   * else.
+   *
+   * The mechanism is below and it is not what the three shapes suggested.
+   * A declared parameter does not only change what comes back for
+   * `select $1`; it changes **the type of any result column derived from a
+   * parameter**, because the server now knows what the expression is. `pg`
+   * declares nothing, so such a column is `text` and arrives as a string.
+   * TypeORM selects parameters constantly - subqueries, the distinct query
+   * behind skip/take, insert-from-select - and hydrates what comes back.
+   *
+   * So the reach of the divergence is not "a bare parameter", which is what
+   * the matrix above was measuring. Anything that is not asserted here is
+   * not known, and that is the lesson this test exists to carry.
+   */
+  it('a declared parameter changes the type of a column derived from it', async () => {
+    const typed = facadePool({ postgrejs: { inferParameterTypes: true } });
+    try {
+      const sql = 'select $1 as x';
+      const byPg = await control.query(sql, [7]);
+      const byDefault = await facade.query(sql, [7]);
+      const byInference = await typed.query(sql, [7]);
+
+      // text, and a string, on both of the paths that declare nothing
+      assert.strictEqual(byPg.fields[0].dataTypeID, 25);
+      assert.strictEqual(byPg.rows[0].x, '7');
+      assert.strictEqual(byDefault.fields[0].dataTypeID, 25);
+      assert.strictEqual(byDefault.rows[0].x, '7');
+
+      // int4, and a number, as soon as the parameter is declared
+      assert.strictEqual(byInference.fields[0].dataTypeID, 23);
+      assert.strictEqual(byInference.rows[0].x, 7);
+    } finally {
+      await typed.end();
+    }
   });
 
   it('sends an array PostgreSQL indexes from 1', async () => {

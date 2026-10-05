@@ -58,14 +58,10 @@ describe('toPoolConfiguration', () => {
 });
 
 describe('resolveFacadeOptions', () => {
-  it('defaults to pg fidelity on every axis it still costs nothing on', () => {
+  it('defaults to pg fidelity on every axis', () => {
     const o = resolveFacadeOptions({});
     assert.strictEqual(o.decoding, 'pg');
-    // The exception, and the only one: parameters go out typed by
-    // PostgreJS. See src/params.ts - the three shapes where that differs
-    // from `pg` are ones where `pg` loses information, and they are pinned
-    // live in test/B-live/params.spec.ts.
-    assert.strictEqual(o.inferParameterTypes, true);
+    assert.strictEqual(o.inferParameterTypes, false);
     assert.strictEqual(o.parseInputDatesAsUTC, false);
     assert.strictEqual(o.normalizeErrors, true);
     assert.strictEqual(o.suppressRedundantPoolError, true);
