@@ -19,17 +19,39 @@ import { prepareValue } from './prepare-value.js';
  * | `BindParam(0, v)` for scalars only | 27/28 |
  * | **this one** | **28/28** |
  *
- * The one PostgreJS misses is an empty array, and an all-null array with it:
- * `determine()` picks an array's type from `value[0]`, which is `undefined`
- * for `[]` and `null` for `[null]`, so neither is typed and the server
- * answers `22P02 malformed array literal: ""`. Rendering to `{}` / `{NULL}`
- * and letting the server resolve it sidesteps that.
+ * The one PostgreJS missed was an empty array, and an all-null array with it:
+ * `determine()` picked an array's type from `value[0]`, which is `undefined`
+ * for `[]` and `null` for `[null]`, so neither was typed and the server
+ * answered `22P02 malformed array literal: ""`.
  *
- * But the score is not really the argument. The facade's contract is to *be*
- * the `pg` module, so any divergence from what `pg` puts on the wire is a
- * bug by definition, however reasonable the other value looks. Reusing `pg`'s
- * own rendering (`prepare-value.ts`) means this cannot drift from it type by
- * type as either library gains decoders.
+ * **Both are fixed upstream** - re-measured against the `node_modules` build
+ * on 2026-10-05, `[]`, `[null]` and `[null, 2]` all round-trip through
+ * PostgreJS's own typing, with and without a cast, and agree with `pg`. So
+ * the score is no longer what holds this policy in place.
+ *
+ * What holds it is the contract. The facade's job is to *be* the `pg`
+ * module, so any divergence from what `pg` puts on the wire is a bug by
+ * definition, however reasonable the other value looks. Reusing `pg`'s own
+ * rendering (`prepare-value.ts`) means this cannot drift from it type by
+ * type as either library gains encoders - a guarantee by construction
+ * rather than by a matrix that has to be re-run.
+ *
+ * **It is paid for, and the bill is on arrays.** `prepareValue` renders an
+ * array to a text literal, which throws away PostgreJS's binary array
+ * encoder. One parameter holding 100 000 `int4`s, allocation per call:
+ * PostgreJS on its own 1.94 MB, `pg` 27.19 MB, this policy 27.89 MB. The
+ * client underneath is fourteen times better than `pg` at the exact thing
+ * this policy declines to use.
+ *
+ * Lifting it for arrays alone was tried and measured: 273 of 275 tests still
+ * pass, the two failures are the unit tests in `test/A-common` that assert
+ * this mechanism rather than any behaviour, and the live parameter matrix
+ * and the differential suite - the two that compare against `pg` - are
+ * untouched. `write a 100k int4[]` becomes 1.87 MB and 13.06 ms against
+ * `pg`'s 27.21 and 17.54. It is not done here because it is **D1's
+ * question, not this file's**: it trades a guarantee that holds by
+ * construction for one that holds as long as someone re-runs the matrix.
+ * See `doc/DRIVER-DESIGN.md` §5 and D1.
  */
 export function toBindParams(
   values: readonly any[] | undefined,
