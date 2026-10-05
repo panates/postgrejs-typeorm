@@ -3,11 +3,35 @@
  * measure - one definition, so the two cannot drift apart. A workload
  * defined twice drifts the first time one of the copies is edited.
  *
- * Two levels, kept separate throughout: raw `pool.query()`, where the
- * difference is the client and nothing else, and the same work through
- * TypeORM repositories, which is what a reader actually runs. Entity
- * hydration sits on top and dilutes any gain, so both answers are worth
- * having and neither substitutes for the other.
+ * Two levels, kept separate throughout: raw statements on a checked-out
+ * connection, where the difference is the client and nothing else, and the
+ * same work through TypeORM repositories, which is what a reader actually
+ * runs. Entity hydration sits on top and dilutes any gain, so both answers
+ * are worth having and neither substitutes for the other.
+ *
+ * ## What a scenario has to be
+ *
+ * Three rules, each of which was learnt by a row breaking it.
+ *
+ * 1. **The client has to dominate it.** A shape where PostgreSQL does the
+ *    work measures PostgreSQL, and its ratio is set by how much scanning or
+ *    writing the author asked for. A `count` over a scan was removed for
+ *    this: swept across scan sizes its speedup read 1.04x, 0.95x, 1.00x and
+ *    0.94x.
+ * 2. **It has to be the path the consumer takes.** These ran through
+ *    `pool.query()`, which TypeORM never calls - a `QueryRunner` checks a
+ *    connection out once and keeps it - and each checkout was 7.6 KB a call
+ *    that no TypeORM user pays.
+ * 3. **It has to carry enough payload that the fixed cost is not the
+ *    answer.** `concurrent reads` fetched one row per read, and measured,
+ *    the same scenario reads +57%, +2% and -30% at one, twenty and a
+ *    hundred rows each. None of those is a fact about concurrency; the row
+ *    was reporting the cost of checking a connection out, twenty times.
+ *
+ * The three are the same rule from different sides: **a scenario has to put
+ * the thing being compared in the majority of what it measures.** A row
+ * that does not is not neutral - it answers a question nobody asked, under
+ * a name that promises otherwise.
  */
 import 'reflect-metadata';
 import { Pool as PgPool } from 'pg';
@@ -435,24 +459,42 @@ export const SCENARIOS = [
       q(db, `select v from ${SCHEMA}.boxes limit $1`, [5000 - (i % 2)]),
   },
   {
-    /* The shape a web application under load actually has, and the only one
-     * here where the pool is doing anything. This facade serialises
-     * statements *per client* to match `pg` - see `src/client.ts` - so what
-     * is compared is the pool handing out ten connections, not either
-     * client's pipelining. */
+    /**
+     * The shape a web application under load has: several requests at once,
+     * each fetching a page. In TypeORM that is one `QueryRunner` per
+     * request, so twenty of them are twenty checkouts - which is why this is
+     * the one scenario that keeps the pool rather than a held connection.
+     *
+     * **Each read returns a page, and that is the whole design of the row.**
+     * It fetched a single row until it was measured, and at that size the
+     * answer is not about either client's decoding: per call, 290 KB against
+     * 456 at one row each, 906 against 920 at twenty, and 4134 against 2906
+     * at a hundred. The ratio runs from +57% to -30% without concurrency
+     * changing at all, because at one row the fixed cost of checking a
+     * connection out is most of what is being counted and at a hundred the
+     * decoding is. A single row per request is not what a request does, and
+     * the number it produced was a measurement of pool bookkeeping wearing
+     * the word "concurrent".
+     *
+     * What it says now, against `page of 100` at -33%: twenty of them at
+     * once land in the same place. Concurrency does not change the answer
+     * here - it multiplies it.
+     */
     name: 'concurrent reads',
     group: 'Read',
     level: 'raw',
-    note: '20 reads at once of 1 row each, pool of 10',
-    iters: 4,
+    note: '20 reads at once of 100 rows each, pool of 10',
+    iters: 2,
     pairs: 61,
     pooled: true,
     run: (db, i) =>
       Promise.all(
         Array.from({ length: 20 }, (_, k) =>
-          q(db, `select * from ${SCHEMA}.rows where id = $1`, [
-            ((i * 20 + k) % SEED_ROWS) + 1,
-          ]),
+          q(
+            db,
+            `select * from ${SCHEMA}.rows order by id offset $1 limit 100`,
+            [((i * 20 + k) % 40) * 100],
+          ),
         ),
       ),
   },

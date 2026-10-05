@@ -183,6 +183,17 @@ workload. There was a deliberately server-dominated row here as a control; it wa
 swept across scan sizes its speedup read 1.04x, 0.95x, 1.00x and 0.94x - it was not doing that job
 either. The sign test is the guard instead.
 
+**And every one carries enough payload that the fixed cost is not the answer.**
+\`concurrent reads\` read one row per request until it was swept: at one row the facade allocated
+57% more per call, at twenty rows 2% more, at a hundred rows 30% less. Nothing about either client
+changed across those three - the row had been reporting the cost of checking a connection out,
+twenty times, under the word "concurrent". It asks for a hundred rows each now, which is also
+nearer what a request does.
+
+Those three rules are one rule from three sides: a scenario has to put the thing being compared in
+the majority of what it measures. A row that does not is not neutral - it answers a question
+nobody asked, under a name that promises otherwise.
+
 ## Results
 
 ### Reading
