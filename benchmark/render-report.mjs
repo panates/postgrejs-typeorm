@@ -148,6 +148,11 @@ Generated from \`benchmark/results/latest.json\` by \`benchmark/render-report.mj
 
 Node ${r.node}, \`postgrejs\` ${r.versions.postgrejs}, \`pg\` ${r.versions.pg}, \`typeorm\` ${r.versions.typeorm},
 PostgreSQL ${r.versions.postgresql} on loopback. Prepared statements: ${r.prepare}.
+PostgreJS's \`asyncErrorHandling\` is **${r.asyncErrorHandling === false ? 'off' : 'on'}** here: it
+captures a caller-preserving async stack on every call and \`pg\` has nothing equivalent, so
+leaving it on would charge one client for a feature the comparison does not cover. Measured, it is
+worth less than this harness's estimator can resolve - it is off to be like-for-like, not to move a
+row.
 
 ## Method
 

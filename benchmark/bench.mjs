@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import {
+  ASYNC_ERROR_HANDLING,
   CONN,
   CONTROL,
   DRIVER,
@@ -416,6 +417,7 @@ const results = {
   measuredAt: new Date().toISOString(),
   node: process.version,
   prepare: PREPARE,
+  asyncErrorHandling: ASYNC_ERROR_HANDLING,
   heapPairs: HEAP_PAIRS,
   control: CONTROL,
   driver: DRIVER,

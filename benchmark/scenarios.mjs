@@ -71,6 +71,39 @@ export const CONN = {
 export const PREPARE = 'default (cached per connection)';
 
 /**
+ * The one PostgreJS default this harness turns off, and the only setting
+ * here that is not both clients' own.
+ *
+ * PostgreJS captures a caller-preserving async stack on every call so a
+ * failure points at the line that made it. `pg` offers nothing equivalent
+ * and pays nothing for it, so leaving it on charges one client for a
+ * feature the other does not have and the comparison does not cover -
+ * PostgreJS's own documentation names turning it off as what makes a
+ * benchmark against such a client fair, and `../postgrejs`'s own harness
+ * has had it off since its adapter was written.
+ *
+ * Two things keep this honest rather than convenient.
+ *
+ * It is worth nothing to these numbers. Measured on the floor statement
+ * with the setting definitely reaching the connection, three runs each:
+ * 12.69 / 12.90 / 13.20 KB a call against 12.85 / 13.31 / 12.75 - 0.05 KB
+ * apart on an estimator whose own spread is about 1 KB. The sampling
+ * profiler next door resolves it at 0.49 KB; this one cannot see it. It is
+ * turned off because it is not like-for-like, not because it moves a row.
+ *
+ * And it was unreachable until recently: `toPoolConfiguration()` is an
+ * allowlist and the option was not on it, so nothing in here could have
+ * turned it off even had it tried. `postgrejs.connection` is what carries
+ * it now.
+ */
+export const ASYNC_ERROR_HANDLING = false;
+
+/** What the facade is built with here, over and above `CONN`. */
+const DRIVER_OPTS = {
+  postgrejs: { connection: { asyncErrorHandling: ASYNC_ERROR_HANDLING } },
+};
+
+/**
  * Every scenario reads what is already stored rather than asking the
  * server to build its values on each call, and every one binds at least
  * one parameter.
@@ -268,7 +301,8 @@ export function openDatabases(pooled = false, level = 'raw', only) {
   if (level === 'raw') {
     const pools = {};
     if (wanted(CONTROL)) pools[CONTROL] = new PgPool({ ...CONN, max });
-    if (wanted(DRIVER)) pools[DRIVER] = new facade.Pool({ ...CONN, max });
+    if (wanted(DRIVER))
+      pools[DRIVER] = new facade.Pool({ ...CONN, ...DRIVER_OPTS, max });
 
     /**
      * A **checked-out connection**, not the pool, unless the scenario is
@@ -316,7 +350,10 @@ export function openDatabases(pooled = false, level = 'raw', only) {
       username: CONN.user,
       driver,
       entities: [Row, Write, Payload],
-      extra: { max },
+      // `extra` is what TypeORM merges into the object it hands `new
+      // Pool(...)`, so it is the same channel a consumer would use. Only
+      // the facade gets it - `pg` has no such setting to turn off.
+      extra: { max, ...(driver ? DRIVER_OPTS : {}) },
       synchronize: false,
       logging: false,
     });
