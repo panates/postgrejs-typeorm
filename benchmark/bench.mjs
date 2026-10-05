@@ -164,54 +164,128 @@ async function latency(scenarios) {
  * the file rather than into a column: it reports the JS heap only, so it
  * cannot see a Buffer and would flatter whichever side buffers more.
  */
+/**
+ * How many times each scenario's memory pass is run per client.
+ *
+ * One measurement each was what this did, and a single figure cannot say
+ * whether a difference is real - which is the question the latency pass
+ * answers with a sign test and the memory pass could not answer at all. Each
+ * pair spawns both children with the order swapped, so neither side is always
+ * the one that follows a cold start, and the wins are counted the same way.
+ *
+ * Seven rather than the fifteen next door, because each pair is two child
+ * processes that each warm up from nothing: at 22 scenarios that is 308
+ * spawns as it stands.
+ *
+ * **Seven buys a coarse answer, and it is the right coarseness here.** At
+ * that count only 7/7 and 0/7 clear p < 0.05, so the test is really asking
+ * "did it win every single pair" - and measured, every scenario but one is
+ * exactly 7/7 or 0/7, because allocation is far steadier than the clock. The
+ * one that is not, `uuid of 5k rows` at 6/7, is also the one whose
+ * difference is 2%. Raise it with `--heap-pairs` when a row is close enough
+ * that the difference between "every time" and "most times" is the question.
+ */
+const HEAP_PAIRS = Number(
+  process.argv.find(a => a.startsWith('--heap-pairs='))?.split('=')[1] ?? 7,
+);
+
+/** One child, one client, one scenario - the measurement, without the pairing. */
+async function measureInChild(scenario, client) {
+  const { stdout } = await run(
+    process.execPath,
+    ['--expose-gc', '--trace-gc', WORKER, client, scenario],
+    { maxBuffer: 64 * 1024 * 1024 },
+  );
+  const lines = stdout.trim().split('\n');
+  // Not the last line: a collection can land after the worker prints, on its
+  // way out, and `--trace-gc` writes to the same stream. Pick the line that
+  // is the payload rather than assuming its position.
+  const jsonLine = lines.findLast(l => l.startsWith('{'));
+  if (!jsonLine)
+    throw new Error(`worker printed no result for ${client} / ${scenario}`);
+  const json = JSON.parse(jsonLine);
+
+  // Sum what each collection between the worker's two marks gave back.
+  // `--trace-gc` prints `before (heap) MB -> after (heap) MB`, so the
+  // difference is the JS heap it reclaimed. This is the cross-check on the
+  // sampled figure, arrived at a completely different way - and it stays in
+  // the file rather than becoming a column, because it reports the JS heap
+  // only and cannot see a Buffer.
+  const at = l => Number(l.match(/]\s+(\d+) ms/)?.[1] ?? NaN);
+  const from = at(lines.find(l => l.startsWith('MARK')) ?? '');
+  const to = at(lines.find(l => l.startsWith('END')) ?? '');
+  let tracedMb = 0;
+  for (const line of lines) {
+    const m = line.match(
+      /(\d+(?:\.\d+)?) \(\d+(?:\.\d+)?\) MB -> (\d+(?:\.\d+)?) \(/,
+    );
+    if (!m) continue;
+    const when = at(line);
+    if (when < from || when > to) continue;
+    tracedMb += Number(m[1]) - Number(m[2]);
+  }
+  return { ...json, tracedPerCallKb: (tracedMb * 1024) / json.iterations };
+}
+
+/**
+ * The memory pass, paired the way the latency pass is.
+ *
+ * One child per client per pair, with the order swapped on alternate pairs so
+ * neither side is always the one that follows a cold start, and the wins
+ * counted on **allocation per call** - the column the report leads with. The
+ * high-water is counted separately because the two rank the clients
+ * differently on purpose: a client that allocates a third as much can sit
+ * higher for reaching the collector's threshold a third as often.
+ */
 async function memory(scenarios) {
   const out = {};
   for (const s of scenarios) {
-    out[s.name] = {};
-    for (const client of [CONTROL, DRIVER]) {
-      const { stdout } = await run(
-        process.execPath,
-        ['--expose-gc', '--trace-gc', WORKER, client, s.name],
-        { maxBuffer: 64 * 1024 * 1024 },
-      );
-      const lines = stdout.trim().split('\n');
-      // Not the last line: a collection can land after the worker prints,
-      // on its way out, and `--trace-gc` writes to the same stream. Pick
-      // the line that is the payload rather than assuming its position.
-      const jsonLine = lines.findLast(l => l.startsWith('{'));
-      if (!jsonLine)
-        throw new Error(`worker printed no result for ${client} / ${s.name}`);
-      const json = JSON.parse(jsonLine);
-
-      // Sum what each collection between the worker's two marks gave back.
-      // `--trace-gc` prints `before (heap) MB -> after (heap) MB`, so the
-      // difference is the JS heap it reclaimed. This is the cross-check on
-      // the sampled figure, arrived at a completely different way - and it
-      // stays in the file rather than becoming a column, because it reports
-      // the JS heap only and cannot see a Buffer.
-      const at = l => Number(l.match(/]\s+(\d+) ms/)?.[1] ?? NaN);
-      const from = at(lines.find(l => l.startsWith('MARK')) ?? '');
-      const to = at(lines.find(l => l.startsWith('END')) ?? '');
-      let tracedMb = 0;
-      for (const line of lines) {
-        const m = line.match(
-          /(\d+(?:\.\d+)?) \(\d+(?:\.\d+)?\) MB -> (\d+(?:\.\d+)?) \(/,
-        );
-        if (!m) continue;
-        const when = at(line);
-        if (when < from || when > to) continue;
-        tracedMb += Number(m[1]) - Number(m[2]);
-      }
-      out[s.name][client] = {
-        ...json,
-        tracedPerCallKb: (tracedMb * 1024) / json.iterations,
-      };
-      process.stderr.write(
-        `  ${s.name.padEnd(28)} ${client.padEnd(18)} ${json.allocPerCallKb
-          .toFixed(1)
-          .padStart(10)} KB/call\n`,
-      );
+    const runs = { [CONTROL]: [], [DRIVER]: [] };
+    let allocWins = 0;
+    let sustainedWins = 0;
+    for (let pair = 0; pair < HEAP_PAIRS; pair++) {
+      const order = pair % 2 ? [DRIVER, CONTROL] : [CONTROL, DRIVER];
+      const measured = {};
+      for (const client of order)
+        measured[client] = await measureInChild(s.name, client);
+      for (const client of [CONTROL, DRIVER])
+        runs[client].push(measured[client]);
+      if (measured[DRIVER].allocPerCallKb < measured[CONTROL].allocPerCallKb)
+        allocWins++;
+      if (measured[DRIVER].sustainedKb < measured[CONTROL].sustainedKb)
+        sustainedWins++;
     }
+    const fold = client => {
+      const all = runs[client];
+      const pick = key => median(all.map(r => r[key]));
+      return {
+        ...all[0],
+        allocPerCallKb: pick('allocPerCallKb'),
+        allocLoKb: Math.min(...all.map(r => r.allocPerCallKb)),
+        allocHiKb: Math.max(...all.map(r => r.allocPerCallKb)),
+        heldKb: pick('heldKb'),
+        sustainedKb: pick('sustainedKb'),
+        sustainedRssKb: pick('sustainedRssKb'),
+        wireKb: pick('wireKb'),
+        wireOutKb: pick('wireOutKb'),
+        tracedPerCallKb: pick('tracedPerCallKb'),
+      };
+    };
+    out[s.name] = {
+      [CONTROL]: fold(CONTROL),
+      [DRIVER]: fold(DRIVER),
+      heapPairs: HEAP_PAIRS,
+      heapWins: allocWins,
+      heapSign: signTest(allocWins, HEAP_PAIRS),
+      sustainedWins,
+    };
+    process.stderr.write(
+      `  ${s.name.padEnd(30)} ${out[s.name][CONTROL].allocPerCallKb
+        .toFixed(1)
+        .padStart(9)} ${out[s.name][DRIVER].allocPerCallKb
+        .toFixed(1)
+        .padStart(9)} KB/call  ${allocWins}/${HEAP_PAIRS}\n`,
+    );
   }
   return out;
 }
@@ -342,6 +416,7 @@ const results = {
   measuredAt: new Date().toISOString(),
   node: process.version,
   prepare: PREPARE,
+  heapPairs: HEAP_PAIRS,
   control: CONTROL,
   driver: DRIVER,
   versions: {},

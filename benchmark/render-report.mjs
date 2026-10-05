@@ -50,12 +50,18 @@ function table(list) {
     const b = s.memory?.[r.driver].allocPerCallKb;
     const mr = memRatio(s);
     const faster = s.ratio < 1;
-    const lessMem = mr !== undefined && mr < 0.97;
-    const moreMem = mr !== undefined && mr > 1.03;
+    /* **Level is the sign test's answer, not a threshold on the median.**
+     * Each scenario's memory is measured in pairs now, one child per client
+     * with the order swapped, and `uuid of 5k rows` is why: a single
+     * measurement had it 3% worse and the pairs have it winning every one.
+     * A 3% band would have printed the first of those as a result. */
+    const memLevel = s.memory?.heapSign ? s.memory.heapSign.p > 0.05 : false;
+    const lessMem = mr !== undefined && !memLevel && mr < 1;
+    const moreMem = mr !== undefined && !memLevel && mr > 1;
     const memCell =
       mr === undefined
         ? ''
-        : `<br>${bold(pct(mr - 1), lessMem)}${!lessMem && !moreMem ? ' level' : ''}`;
+        : `<br>${bold(pct(mr - 1), lessMem)}${memLevel ? ' level' : ''}`;
     return (
       `| ${s.name} - ${s.note} ` +
       `| ${bold(ms(s.msControl), !faster)}${a === undefined ? '' : `<br>${bold(`${kb(a)}/call`, !lessMem && !moreMem ? false : !lessMem)}`} ` +
@@ -79,7 +85,11 @@ const pick = (group, level) =>
 const payloadWins = list =>
   [...list]
     .filter(
-      s => s.ratio < 0.7 && memRatio(s) !== undefined && memRatio(s) < 0.5,
+      s =>
+        s.ratio < 0.7 &&
+        memRatio(s) !== undefined &&
+        memRatio(s) < 0.5 &&
+        s.memory?.heapSign?.p <= 0.05,
     )
     .sort((a, b) => a.ratio - b.ratio);
 
@@ -109,7 +119,7 @@ const memWins = [...payloads]
   )
   .join(', ');
 const memLosses = rows
-  .filter(s => s.memory && memRatio(s) > 1.03)
+  .filter(s => s.memory && memRatio(s) > 1 && s.memory.heapSign?.p <= 0.05)
   .sort((a, b) => memRatio(b) - memRatio(a))
   .map(
     s =>
@@ -146,7 +156,9 @@ figure is the median of 41 to 401 pairs. Memory is a separate pass: one child pr
 one scenario each, \`--expose-gc\`, because a baseline taken with both clients alive has their pools
 and buffers *under* it rather than in it.
 
-Allocation is the total a batch asks for, counted as every fall in \`heapUsed + external\` plus what
+Allocation is measured in pairs too - ${r.heapPairs ?? ''} per scenario, one child per client with the order swapped -
+and a row reads *level* when the sign test says so rather than when the medians happen to be close.
+It is the total a batch asks for, counted as every fall in \`heapUsed + external\` plus what
 the heap still holds at the end. Not a per-call peak - that is not measurable, and the worker's
 header says why in full. \`external\` is in it because a \`Buffer\` is external and this is an
 argument about bytes off a socket.
