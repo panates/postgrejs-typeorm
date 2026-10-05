@@ -75,6 +75,13 @@ the only remaining advantage. Do not reopen that without new evidence.
 
 ## Where things are
 
+  > **The peer floor is wrong and has to be raised before this ships.** `inferParameterTypes`
+  > defaults to **true** since 2026-10-06, and that depends on `341f343` - a non-integer scalar
+  > declared `numeric` rather than `float8`, without which `$1::money` with `12.34` fails `42846`.
+  > That commit is on `dev` and **unreleased**, so the version carrying it is not known yet and is
+  > deliberately not guessed at here. When upstream releases, set the floor to that version. The
+  > table below is the history of the old floor and is accurate for everything except this.
+
 - **PostgreJS**: `../postgrejs`. Its `CLAUDE.md` describes the internals. Peer is **`>=3.10.0 <4`**,
   and that floor is exact rather than cautious - `src/` uses six things that all landed in 3.10.0
   and nothing works without them:
@@ -96,6 +103,14 @@ the only remaining advantage. Do not reopen that without new evidence.
   directory and released before this package ships, so an unreleased fix is a scheduling detail.
   Do not add a branch, a fallback or a feature test for a published version, and do not run
   `git tag --contains` to justify keeping one.
+
+  **Parameters are PostgreJS's to type, and `pg`'s renderer is the opt-out.** Reversed on
+  2026-10-06 after `341f343` closed the last case `pg` got right and PostgreJS got wrong. Three
+  shapes still differ and `pg` loses information in all three - a bare `select $1` gives `pg` a
+  string and this package the value - pinned on both sides in `test/B-live/params.spec.ts` rather
+  than skipped. `prepare-value.ts` stays, tested against `pg`'s own function, because it is what
+  `inferParameterTypes: false` runs. Worth 27.89 MB a call against 1.94 on a 100 000-element array,
+  with identical bytes on the wire.
 
   **The facade carries no post-decode fixups and nothing of `pg`'s.** No table that rewrites values
   after decoding, no `postgres-interval`, no `postgres-array`. When a divergence from `pg` turns

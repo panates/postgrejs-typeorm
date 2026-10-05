@@ -137,13 +137,60 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
     }
   };
 
+  /**
+   * **The three shapes this package deliberately answers differently, and
+   * both halves of each.**
+   *
+   * `pg` is the oracle everywhere else in this file and that is the point of
+   * the file. These are where it stopped being one: parameters go out typed
+   * by PostgreJS now (`src/params.ts`), and on a parameter with no context
+   * to be resolved from, a declared type is information `pg` throws away.
+   * `select $1` with `12` is the shape - `pg` hands back the string `'12'`
+   * because it never told the server what it was sending.
+   *
+   * Pinning both sides rather than skipping the case is the whole value
+   * here: a change on either side still fails, so this records a decision
+   * rather than excusing a difference. The day `pg` starts answering `12`,
+   * or this package stops, a test says so.
+   */
+  const INTENDED: Record<string, { pg: string; ours: string }> = {
+    'bare parameter, integer': { pg: 'ok:string:12', ours: 'ok:number:12' },
+    'bare parameter, boolean': {
+      pg: 'ok:string:true',
+      ours: 'ok:boolean:true',
+    },
+    // pg cannot multiply a parameter it declined to type; we can.
+    'arithmetic on an undeclared parameter': {
+      pg: 'err:22P02',
+      ours: 'ok:string:3.0',
+    },
+  };
+
   for (const [label, sql, values] of CASES) {
     it(label, async () => {
       const expected = await run(control as any, sql, values);
       const actual = await run(facade as any, sql, values);
+      const intended = INTENDED[label];
+      if (intended) {
+        assert.strictEqual(expected, intended.pg, `${label}: pg moved`);
+        assert.strictEqual(actual, intended.ours, `${label}: we moved`);
+        return;
+      }
       assert.strictEqual(actual, expected, `${label}: ${sql}`);
     });
   }
+
+  it('diverges from pg on exactly the shapes it says it does', () => {
+    // So a divergence cannot be added by editing one map: every key here
+    // has to be a case this file actually runs, and the count is stated.
+    const labels = new Set(CASES.map(([l]) => l));
+    for (const key of Object.keys(INTENDED))
+      assert.ok(
+        labels.has(key),
+        `INTENDED names a case that is not run: ${key}`,
+      );
+    assert.strictEqual(Object.keys(INTENDED).length, 3);
+  });
 
   it('sends an array PostgreSQL indexes from 1', async () => {
     // Not a pg comparison: an assertion about the value the server stored,

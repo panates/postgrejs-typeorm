@@ -4,7 +4,12 @@ import { resolveFacadeOptions } from '../../src/config.js';
 import { UNSPECIFIED_OID } from '../../src/constants.js';
 import { toBindParams } from '../../src/params.js';
 
-const pgFaithful = resolveFacadeOptions({});
+// Named for the path it exercises rather than for the default, which it
+// stopped being: `inferParameterTypes` is on by default now, and these
+// assertions are about `pg`'s own rendering - the opt-out.
+const pgFaithful = resolveFacadeOptions({
+  postgrejs: { inferParameterTypes: false },
+});
 const inferring = resolveFacadeOptions({
   postgrejs: { inferParameterTypes: true },
 });
@@ -36,11 +41,12 @@ describe('toBindParams', () => {
     assert.strictEqual(typeof (out[2] as any).value, 'string');
   });
 
-  it('renders an empty array as {}, which PostgreJS cannot type on its own', () => {
-    // determine() picks an array's type from value[0], which is undefined
-    // for [] and null for [null], so neither gets a type and the server
-    // answers 22P02. Rendering it and letting the server resolve it is the
-    // way past that - see B-live/params.spec.ts for the live half.
+  it('renders an empty array as {} and an all-null one as {NULL}', () => {
+    // This used to be the case PostgreJS could not type: determine() picked
+    // an array's type from value[0], undefined for [] and null for [null],
+    // and the server answered 22P02. Fixed upstream - both round-trip on
+    // its own typing now - so this asserts pg's rendering because that is
+    // what this path is, not because it is the only thing that works.
     const out = toBindParams([[], [null]], pgFaithful)! as BindParam[];
     assert.strictEqual((out[0] as any).value, '{}');
     assert.strictEqual((out[1] as any).value, '{NULL}');

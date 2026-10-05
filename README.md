@@ -85,8 +85,26 @@ new DataSource({
 | `normalizeErrors` | `true` | makes a caught error look like `pg`'s: the caret diagram out of `message`, `position` as a string. The structured fields are identical either way |
 | `suppressRedundantPoolError` | `true` | PostgreJS reports a dead pooled connection on the pool *and* rejects the in-flight query; `pg` only rejects the query. This drops the duplicate |
 | `parseInputDatesAsUTC` | `false` | mirrors `pg`'s `defaults.parseInputDatesAsUTC`: render a `Date` parameter from its UTC fields rather than its local ones |
-| `inferParameterTypes` | `false` | lets PostgreJS declare an OID per parameter from the JS value, instead of sending every parameter unspecified the way `pg` does |
+| `inferParameterTypes` | `true` | lets PostgreJS type each parameter from the JS value. `false` restores `pg`'s own rendering exactly - every value to text, declared unspecified - which matters only for a parameter with no context around it; see below |
 | `connection` | - | PostgreJS's own connection settings, forwarded as given - everything it has that `pg` has no name for, and so no `pg` option to arrive through: `keepAlive`, `schema`, `timezone`, `hosts` and `targetSessionAttrs` for failover, `channelBinding`, `preparedStatementCacheSize`, `buffer`, `pipeline*`, `debugLogger`, `timing`, `asyncErrorHandling`. What this package translates out of the `pg` options is kept out of the type, so it cannot fight the translation |
+
+**The one place this package answers differently from `pg`**, and the reason the row above
+defaults the way it does. A parameter with nothing around it to resolve from:
+
+| | `pg` | here |
+| --- | --- | --- |
+| `select $1` with `12` | `'12'` (string) | `12` (number) |
+| `select $1` with `true` | `'true'` (string) | `true` (boolean) |
+| `select $1 * 2` with `1.5` | `22P02` | `'3.0'` |
+
+`pg` never tells the server what it is sending, so it gets a string back and cannot multiply at
+all. Everywhere else - a column, a comparison, a function argument - the context decides and both
+land on the same value, which is why TypeORM sees no difference: it generates no SQL with a bare
+parameter in it. Set `inferParameterTypes: false` if you hold raw SQL that depends on the string.
+
+What it buys: a parameter holding 100 000 `int4`s allocates **1.94 MB a call instead of 27.89**.
+Identical bytes on the wire and the same declared type either way - the difference is that
+PostgreJS writes the literal into its own buffer where `pg`'s renderer concatenates it.
 
 One worth knowing about in that last row. PostgreJS captures a caller-preserving async stack on
 every call (`asyncErrorHandling`, on by default) so a failure points at the line that made it;

@@ -37,9 +37,22 @@ export interface PgjsFacadeOptions {
    * Let PostgreJS derive an OID per parameter from the JS value instead of
    * declaring every parameter unspecified the way `pg` does.
    *
-   * Off by default, and it is not the same thing as being faster: see
-   * `params.ts` for what it changes and `doc/DRIVER-DESIGN.md` §5 for the
-   * measurement behind the default.
+   * **On by default since the `money` case closed upstream.** It was off
+   * for one reason - a parameter PostgreJS typed where `pg` left the server
+   * to - and that reason has been measured away: against a build carrying
+   * `341f343` the whole live parameter matrix agrees with `pg` apart from
+   * three shapes where `pg` is the one losing information, all recorded in
+   * `test/B-live/params.spec.ts`.
+   *
+   * `false` restores `pg`'s own rendering exactly - `prepareValue()` then
+   * OID 0 for every value - for code that needs the string `'12'` back from
+   * `select $1` because that is what it has always had. Note that
+   * `parseInputDatesAsUTC` only has meaning on that path: it is an option of
+   * `pg`'s renderer, and PostgreJS sends a `Date` untyped with the process's
+   * own offset, which is what `pg` sends anyway.
+   *
+   * See `params.ts` for what it changes and `doc/DRIVER-DESIGN.md` §5 and D1
+   * for the measurements behind it.
    */
   inferParameterTypes?: boolean;
 
@@ -188,7 +201,7 @@ export function resolveFacadeOptions(
   const o = config.postgrejs ?? {};
   return {
     decoding: o.decoding ?? 'pg',
-    inferParameterTypes: o.inferParameterTypes ?? false,
+    inferParameterTypes: o.inferParameterTypes ?? true,
     parseInputDatesAsUTC: o.parseInputDatesAsUTC ?? false,
     fetchAsString: o.fetchAsString,
     prepare: o.prepare,
