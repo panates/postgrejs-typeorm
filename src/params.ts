@@ -36,12 +36,23 @@ import { prepareValue } from './prepare-value.js';
  * type as either library gains encoders - a guarantee by construction
  * rather than by a matrix that has to be re-run.
  *
- * **It is paid for, and the bill is on arrays.** `prepareValue` renders an
- * array to a text literal, which throws away PostgreJS's binary array
- * encoder. One parameter holding 100 000 `int4`s, allocation per call:
- * PostgreJS on its own 1.94 MB, `pg` 27.19 MB, this policy 27.89 MB. The
- * client underneath is fourteen times better than `pg` at the exact thing
- * this policy declines to use.
+ * **It is paid for, and the bill is on arrays.** One parameter holding
+ * 100 000 `int4`s, allocation per call: PostgreJS on its own 1.94 MB, `pg`
+ * 27.19 MB, this policy 27.89 MB.
+ *
+ * Not because a binary encoding is given up - that was the first reading
+ * here and it was wrong. PostgreJS's `isUnspecifiedParam` already sends an
+ * array of numbers as unspecified **text**, for the same reason this file
+ * does: `[1, 2]` is `int4[]`, `int8[]`, `numeric[]` or `float8[]` depending
+ * on where it lands, and those have no implicit casts between them. Counted
+ * on the socket for one such call, all three write the same order of bytes
+ * - `pg` 1 300 124, PostgreJS 1 100 146, this facade 1 300 047.
+ *
+ * The fourteen times is in **how the literal is built**: PostgreJS writes it
+ * into its own buffer, `prepareValue` concatenates it. Same wire contract,
+ * same declared type, same bytes - fourteen times the garbage to produce
+ * them. Which is also why lifting the policy for arrays is narrow: it does
+ * not change what the server is told, only who assembles the text.
  *
  * Lifting it for arrays alone was tried and measured: 273 of 275 tests still
  * pass, the two failures are the unit tests in `test/A-common` that assert
