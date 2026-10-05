@@ -167,6 +167,15 @@ Every scenario binds at least one parameter. \`pg\` sends a statement with no va
 PostgreSQL's *simple* protocol and takes the extended one as soon as a parameter appears, which is
 what PostgreJS always speaks; without one the two are not running the same protocol.
 
+**And every one runs on a checked-out connection**, which is the path TypeORM takes: a
+\`QueryRunner\` calls \`pool.connect()\` once and sends every statement of its life down that one
+connection - \`pool.query()\` appears nowhere in its PostgreSQL driver. These scenarios used the
+pool anyway until it was measured: each checkout builds a client wrapper, a release closure and two
+events, and on a \`point read\` that is 25.0 KB a call against 17.4 on a held connection. Charging a
+reader for a path their ORM never takes is the same mistake as weighting the server, one layer up.
+The exception is \`concurrent reads\`, which keeps the pool because twenty concurrent reads in
+TypeORM *are* twenty QueryRunners, and so twenty checkouts.
+
 **Every scenario is one the client dominates**, and that is a selection rule rather than a
 coincidence. A shape where PostgreSQL does most of the work measures PostgreSQL: its ratio is set
 by how much scanning or writing the author asked for, and a reader takes it for a property of the

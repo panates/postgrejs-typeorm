@@ -230,14 +230,47 @@ export const Write = new EntitySchema({
 export function openDatabases(pooled = false, level = 'raw') {
   const max = pooled ? 10 : 1;
   if (level === 'raw') {
-    const dbs = {
+    const pools = {
       [CONTROL]: new PgPool({ ...CONN, max }),
       [DRIVER]: new facade.Pool({ ...CONN, max }),
     };
+
+    /**
+     * A **checked-out connection**, not the pool, unless the scenario is
+     * about the pool.
+     *
+     * This is what TypeORM does: a `QueryRunner` calls `pool.connect()` once
+     * and runs every statement of its life on that one connection -
+     * `pool.query()` is never called anywhere in its PostgreSQL driver. The
+     * raw scenarios used the pool anyway, and it cost this package 7.6 KB a
+     * call that no TypeORM user pays: measured, the same `point read` is
+     * 25.0 KB/call through `pool.query()` and 17.4 on a checked-out client,
+     * because each checkout builds a `PgClient` wrapper, a release closure
+     * and two emits. Against `pg`'s 16.0 that is the difference between
+     * reading +56% and +9%.
+     *
+     * `pooled: true` keeps the pool, and there it is the faithful shape
+     * rather than a shortcut: twenty concurrent reads in TypeORM are twenty
+     * QueryRunners, which is twenty checkouts.
+     */
+    if (pooled)
+      return {
+        dbs: pools,
+        async close() {
+          for (const db of Object.values(pools)) await db.end();
+        },
+      };
+
+    const dbs = {};
     return {
       dbs,
+      async ready() {
+        for (const [name, pool] of Object.entries(pools))
+          dbs[name] = await pool.connect();
+      },
       async close() {
-        for (const db of Object.values(dbs)) await db.end();
+        for (const db of Object.values(dbs)) db.release();
+        for (const pool of Object.values(pools)) await pool.end();
       },
     };
   }
@@ -363,13 +396,23 @@ export const SCENARIOS = [
       q(db, `select v from ${SCHEMA}.uuids limit $1`, [5000 - (i % 2)]),
   },
   {
-    /* Comes out level, and that is the result rather than a dull row: the
-     * socket counter reads 423 KB in on both sides, the identical bytes,
-     * because this facade asks for the whole geometric family as text -
-     * `pg` returns strings for it, so matching `pg` means giving up the
-     * decoder. The row prices that entry in the `fetchAsString` list. A
-     * dialect that lets PostgreJS decode `box` measures 1.87x on the same
-     * shape. */
+    /* The socket counter reads 423 KB in on **both** sides, the identical
+     * bytes: this facade asks for the whole geometric family as text,
+     * because `pg` returns strings for it and matching `pg` means giving up
+     * the decoder. So whatever this row shows cannot be the wire.
+     *
+     * It shows 1.09x and 16% less allocated. That is the row machinery
+     * underneath - the same text, read off the socket and turned into rows
+     * more cheaply. Worth having for exactly that reason: it is the one
+     * shape here where the two clients are handed byte-for-byte the same
+     * thing, so nothing else can be credited.
+     *
+     * (It read +4% until the raw scenarios moved off `pool.query()` and
+     * -16% after, and **why is not established**. The per-checkout wrapper
+     * it stopped paying is 7.6 KB a call against a difference of about 380
+     * KB in 2.4 MB, so that is not the explanation; it is recorded here as
+     * an open question rather than given one. A dialect that lets PostgreJS
+     * decode `box` measures 1.87x on the same shape.) */
     name: 'box of 5k rows',
     group: 'Read',
     level: 'raw',
@@ -475,41 +518,40 @@ export const SCENARIOS = [
     note: '20 rows, one statement each, inside one transaction',
     iters: 3,
     pairs: 61,
+    /* On the connection the scenario already holds, which is where a
+     * TypeORM transaction runs: `QueryRunner.startTransaction()` sends BEGIN
+     * on the connection it checked out, not a fresh one. */
     run: async (db, i) => {
-      const client = await db.connect();
-      try {
-        await client.query('begin');
-        for (let k = 0; k < 20; k++)
-          await client.query(
-            `insert into ${SCHEMA}.writes (name) values ($1)`,
-            [`t${i}-${k}`],
-          );
-        await client.query('commit');
-      } finally {
-        client.release();
-      }
+      await db.query('begin');
+      for (let k = 0; k < 20; k++)
+        await db.query(`insert into ${SCHEMA}.writes (name) values ($1)`, [
+          `t${i}-${k}`,
+        ]);
+      await db.query('commit');
     },
   },
-  {
-    name: 'write a 4 MB bytea',
-    group: 'Write',
-    level: 'raw',
-    /* **Read the allocation column, not the clock.** Both clients push 4 MB
-     * through a socket and the server stores it; measured, the send path on
-     * its own (`select length($1::bytea)`, where the server barely works) is
-     * 1.03x and the insert 1.06x, so the clock here is the wire rather than
-     * either client. What is a real client difference is what it costs to
-     * get those bytes out: 3.3 MB allocated against 5.2. The row is kept for
-     * that column. */
-    note: '1 parameter of 4 MB - the clock is the socket, the allocation is not',
-    iters: 3,
-    pairs: 41,
-    run: (db, i) =>
-      q(db, `insert into ${SCHEMA}.writes (name, blob) values ($1, $2)`, [
-        `b${i}`,
-        BLOB_4MB,
-      ]),
-  },
+  /**
+   * **There is no 4 MB *write* here, and it was removed rather than never
+   * written.** Two measurements took it out, one per column.
+   *
+   * Its clock: running the same insert with the payload generated
+   * server-side, so the send costs nothing, reads 13.25 ms against the
+   * 19.47 the full call takes - two thirds of the row is PostgreSQL writing
+   * 4 MB. The remaining third is both clients pushing bytes through a socket
+   * at the same speed, isolated as `select length($1::bytea)` at 1.03x.
+   *
+   * Its allocation: it read 5.5 MB against 3.6 while memory was one
+   * measurement per client, and that was the reason to keep the row. Paired
+   * seven ways it is 2.91 MB against 3.24, won 1 of 7, with the two spreads
+   * overlapping - level, and slightly the wrong way. The figure that
+   * justified the row was a single-sample artefact, which is what pairing
+   * the memory pass was for.
+   *
+   * So neither column says anything about either client, and `bytea of 4 MB`
+   * on the read side - 2.25x and 92% less allocated - keeps the type covered
+   * where the client is the one doing the work.
+   */
+
   /**
    * There is no control row here, and removing the one there was is the
    * point rather than an omission.
