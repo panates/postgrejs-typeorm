@@ -29,12 +29,29 @@ import { prepareValue } from './prepare-value.js';
  * PostgreJS's own typing, with and without a cast, and agree with `pg`. So
  * the score is no longer what holds this policy in place.
  *
- * What holds it is the contract. The facade's job is to *be* the `pg`
- * module, so any divergence from what `pg` puts on the wire is a bug by
- * definition, however reasonable the other value looks. Reusing `pg`'s own
- * rendering (`prepare-value.ts`) means this cannot drift from it type by
- * type as either library gains encoders - a guarantee by construction
- * rather than by a matrix that has to be re-run.
+ * **What holds it is three values a caller reads.** `money` from a
+ * non-integer used to be the last live case and it is closed upstream
+ * (`341f343`: a finite non-integer is declared `numeric`, not `float8`, and
+ * `numeric -> money` is an assignment cast where `float8 -> money` has no
+ * `pg_cast` row at all). With that in, handing every parameter to PostgreJS
+ * scores 42/42 on the matrix as it then stood - and the matrix was wrong.
+ * It compared `String(v)`, under which `12` and `'12'` are one answer:
+ *
+ * ```
+ *   select $1      12      pg '12' (string)    declared 12 (number)
+ *   select $1      true    pg 'true' (string)  declared true (boolean)
+ *   select $1 * 2  1.5     pg 22P02            declared '3.0'
+ * ```
+ *
+ * All three are correct values and a facade still cannot ship them - a
+ * caller moving off `pg` would find a string had become a number. They are
+ * in `test/B-live/params.spec.ts` now, compared with their types on.
+ *
+ * So the policy stays, and what is left of the old argument stays with it:
+ * reusing `pg`'s own rendering means this cannot drift from it type by type
+ * as either library gains encoders - a guarantee by construction rather
+ * than by a matrix that has to be re-run, which this round is the reason to
+ * take seriously.
  *
  * **It is paid for, and the bill is on arrays.** One parameter holding
  * 100 000 `int4`s, allocation per call: PostgreJS on its own 1.94 MB, `pg`
@@ -54,14 +71,22 @@ import { prepareValue } from './prepare-value.js';
  * them. Which is also why lifting the policy for arrays is narrow: it does
  * not change what the server is told, only who assembles the text.
  *
- * Lifting it for arrays alone was tried and measured: 273 of 275 tests still
- * pass, the two failures are the unit tests in `test/A-common` that assert
- * this mechanism rather than any behaviour, and the live parameter matrix
- * and the differential suite - the two that compare against `pg` - are
- * untouched. `write a 100k int4[]` becomes 1.87 MB and 13.06 ms against
- * `pg`'s 27.21 and 17.54. It is not done here because it is **D1's
- * question, not this file's**: it trades a guarantee that holds by
- * construction for one that holds as long as someone re-runs the matrix.
+ * **Taking that back needs one thing from upstream, and not a change here.**
+ * The shape that works is `isUnspecifiedParam(v) ? v : BindParam(0,
+ * prepareValue(v))` - hand PostgreJS the value exactly where it would have
+ * sent it unspecified anyway, so the wire contract is identical on both
+ * branches and the fast lane is reached for the values that have one. That
+ * predicate is internal: not on the root export, and `exports` carries only
+ * `.` and `./package.json`.
+ *
+ * Writing our own copy of it is the one thing this package does not do.
+ * `isUnspecifiedParam` has changed its mind three times in one round -
+ * empty arrays, all-null arrays, non-integer scalars - and a stale copy
+ * would silently begin declaring types where PostgreJS declares none, which
+ * is a correctness bug reachable from a dependency bump with no test on
+ * either side that would fail. Asked for in
+ * `../postgrejs/.claude/export-isunspecifiedparam.md`.
+ *
  * See `doc/DRIVER-DESIGN.md` §5 and D1.
  */
 export function toBindParams(
