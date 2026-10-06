@@ -1,5 +1,14 @@
 import { PgClient } from './client.js';
 import { PgPool } from './pool.js';
+import { patchTypeormBooleans } from './typeorm-boolean.js';
+
+/**
+ * Applied on import, deliberately: TypeORM's PostgreSQL driver turns a
+ * `boolean` into `1`/`0`, which only works because `pg` declares no type for
+ * a parameter. See `typeorm-boolean.ts` for what it costs, what was weighed,
+ * and `TYPEORM_POSTGREJS_NO_BOOLEAN_PATCH=1` to skip it.
+ */
+patchTypeormBooleans();
 
 export { PgClient } from './client.js';
 export type {
@@ -11,6 +20,7 @@ export { FETCH_AS_STRING_OIDS, UNSPECIFIED_OID } from './constants.js';
 export { PgPool } from './pool.js';
 export { prepareValue } from './prepare-value.js';
 export type { PgField, PgResult } from './result.js';
+export { patchTypeormBooleans } from './typeorm-boolean.js';
 
 /**
  * `pg`'s `Pool` and `Client`, under the names the module exports them by, so
