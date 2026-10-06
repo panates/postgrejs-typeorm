@@ -237,10 +237,12 @@ re-checked in the TypeORM round wherever its expectations differ - the entries b
   so a plain string arrives declared `varchar` and PostgreSQL stops inferring from context -
   inserting into a `json` column, `coalesce($1, 1)`, `$1 || x` and every overloaded function fail.
   `pg` sends OID 0 (unspecified). `new BindParam(0, value)` asks PostgreJS for the same.
-  **OID 0 alone is not enough for a facade** - measured 23/28 against `pg`, because PostgreJS's typed
-  encoders still run for `Date`, arrays and objects. What works is `pg`'s own `prepareValue(v)`
-  *first*, then OID 0: 28/28. Render the value the way `pg` renders it rather than only asking for
-  the same declared type. See `doc/DRIVER-DESIGN.md` §5.
+  **PostgreJS sends most of them unspecified itself now** - a string, a `Date`, an array - so the
+  facade hands those over and binds only what PostgreJS would otherwise type. Nothing is rendered:
+  since `a11a9af` an undeclared parameter is written the way `pg` writes one, measured byte for
+  byte. A number is the one value left declared, deliberately. `doc/DRIVER-DESIGN.md` §5 is the
+  whole of it, and the history - `prepareValue(v)` then OID 0 for everything scored 28/28 against
+  23/28 and was the policy until 2026-10-06 - is §5.6.
 - **`rowsAffected` is a number**, set for INSERT/UPDATE/DELETE/MERGE. `QueryResult` also carries
   `command`, `fields`, `rowType`, `rows`.
 - **`rollbackOnError` defaults to true** - every statement inside a transaction runs under a
@@ -250,15 +252,14 @@ re-checked in the TypeORM round wherever its expectations differ - the entries b
   `'error'` as a `ConnectionLostError` - `code` `'08006'`, `processID`, the socket error as `cause`.
   The in-flight query rejects with the same object. `pg` does neither: it rejects the query with the
   server's own `57P01` and raises nothing on the pool.
-- **Two PostgreJS defects, both silently corrupting data, both reaching `postgrejs-kysely` today.**
-  Found in this round and written up in `doc/DRIVER-DESIGN.md` §5. Until they are fixed upstream, do
-  not hand PostgreJS a `Date` or a JS array as a parameter:
-  - a `Date` **does not round-trip through a `timestamptz` column** - the instant shifts by the
-    local offset. Invisible whenever the session's `TimeZone` and the process's zone agree - not
-    merely at UTC. **Fixed upstream**: a `Date` now goes out untyped, as text carrying the process's
-    own offset, which is what `pg` sends.
-  - the binary array encoder writes **lower bound 0** (`../postgrejs/src/util/encode-binaryarray.ts:31`),
-    so `arr[1]` returns the second element and `array_lower` reports 0.
+- **Two PostgreJS defects this package found, both silently corrupting data, both since fixed
+  upstream.** Written up in `doc/DRIVER-DESIGN.md` §5.8, and kept there because they are why the
+  parameter policy was what it was for most of this package's history:
+  - a `Date` did not round-trip through a `timestamptz` column - the instant shifted by the local
+    offset, invisible whenever the session's `TimeZone` and the process's zone agreed, not merely at
+    UTC. A `Date` now goes out untyped, carrying the process's own offset, which is what `pg` sends.
+  - the binary array encoder wrote **lower bound 0**, so `arr[1]` returned the second element and
+    `array_lower` reported 0.
 - **Cursors read through a portal**, which lives only as long as the transaction that created it.
   Any other statement on the same connection destroys it. TypeORM streams through `pg-query-stream`,
   and **it maps**: `QueryStream.submit()` drives pg's private protocol object, but TypeORM only ever

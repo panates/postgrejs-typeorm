@@ -215,56 +215,167 @@ division by zero. **Every structured field is identical on all seven**: `code`, 
 All of it is cosmetic **to TypeORM** (§2: it reads nothing), and all of it is fixable in the facade
 if `pg` fidelity is wanted for user code. That is decision **D3**.
 
-## 5. Parameter types - and two PostgreJS defects
+## 5. Parameter types
 
 TypeORM builds a positional `any[]` and passes it straight through
 (`PostgresQueryRunner.ts:274`); `escapeQueryWithParameters` only rewrites `:name` into `$n`
 (`PostgresDriver.ts:1012-1054`). Values reach the driver after `preparePersistentValue`
 (`:756-864`), which stringifies `json`/`jsonb`, `hstore`, `simple-array`, `cube`, `ltree`, `point`
-and `circle`, and runs the timestamp family through `DateUtils.mixedDateToDate` - so what reaches
-the driver for a `timestamptz` column is a JS `Date`, which is exactly the value §5's first defect
-mishandles.
+and `circle`, runs the timestamp family through `DateUtils.mixedDateToDate`, and - the one that
+matters most here - turns a `boolean` into `1`/`0`. See §5.4.
 
-Three policies were measured on 28 query shapes, one live connection each.
-**Re-measured after the two defects below were fixed upstream**, which is
-where the first two columns' scores come from:
+### 5.1 What the policy is
 
-| policy | what it does | before the fixes | after |
+**Nothing is rendered.** A value PostgreJS would otherwise declare a type for is bound at OID 0
+instead; everything else is handed over untouched, because PostgreJS already sends it untyped for
+the same reasons `pg` does.
+
+```ts
+out[i] = postgrejsWouldDeclare(v) ? new BindParam(0, v) : v;
+```
+
+`src/params.ts` is ten lines of code under that. The reasoning is the rest of this section.
+
+### 5.2 The surface: which values PostgreJS declares a type for
+
+Measured one `select $1 as x` per value, comparing the result column's OID against `pg`'s:
+
+| value | `pg` | PostgreJS | what this package does |
 | --- | --- | --- | --- |
-| `raw` | hand the value to PostgreJS untouched (`typeMap.determine()` picks an OID) | 23/28 | **27/28** |
-| `bind0` | wrap scalars in `new BindParam(0, v)`, leave `Date`/`Buffer`/array/object to PostgreJS - what `postgrejs-kysely` and `postgrejs-drizzle` do | 23/28 | **27/28** |
-| `pgwire` | do exactly what `pg` does: `prepareValue(v)`, then send the result as OID 0 | **28/28** | **28/28** |
+| string | `text` | `text` | hand over |
+| `Date` | `text` | `text` | hand over |
+| array of numbers | `text` | `text` | hand over |
+| array of strings | `text` | `text` | hand over |
+| `null` | `text` | `text` | hand over |
+| **number** | `text` | `int4` / `numeric` | **hand over - see §5.3** |
+| boolean | `text` | `bool` | bind at OID 0 |
+| array of booleans | `text` | `bool[]` | bind at OID 0 |
+| plain object | `text` | `json` | bind at OID 0 |
+| `Buffer` | `bytea` (OID 0, bytes) | `bytea` | bind at OID 0 |
 
-The five failures that were shared by `raw` and `bind0`, and what became of them:
+`test/B-live/params.spec.ts` pins this against a live server. **The hazardous direction is PostgreJS
+beginning to declare something it currently leaves untyped**: such a value would be handed over,
+come back a different type than `pg` gives, and nothing else here would notice - the matrix runs
+the shapes an ORM writes, where context decides the type and both clients agree.
 
-| case | `pg` | PostgreJS, before | after |
-| --- | --- | --- | --- |
-| `Date` into `timestamptz` | `2024-03-05 06:07:08.9+00` | `2024-03-05 09:07:08.9+00` - **the wrong instant** | fixed |
-| `[1,2,3]` into `int4[]` | `{1,2,3}` | `[0:2]={1,2,3}` - **lower bound 0** | fixed |
-| `['a','b']` into `text[]` | `{a,b}` | `[0:1]={a,b}` | fixed |
-| `['','b']` into `text[]` | `{"",b}` | `[0:1]={"",b}` | fixed |
-| `[]` into `text[]` | `{}` | error `22P02` | **still fails** |
+The `Buffer` row was wrong until it was pinned. It was handed over, on the reasoning that PostgreJS
+sends bytes either way; it does, and it also declares `bytea` where `pg` declares nothing.
+`select $1` on raw bytes is `22021` under `pg` and a `Buffer` back without the fix, while both
+answer `0102ff` for `$1::bytea` - which is why it survived.
 
-The one that remains is `determine()` typing an array from `value[0]` alone:
-that is `undefined` for `[]` and `null` for `[null]`, so neither is typed and
-the server answers `22P02 malformed array literal: ""`. A fourth thing to take
-upstream, smaller than the other three.
+### 5.3 Why a number is allowed to be declared, and what it cost
 
-**Settled, not a decision: the facade uses `pgwire`.** After the upstream fixes the score gap is one
-case rather than five, so the argument is no longer really the score - it is that the facade's job is
-to *be* the `pg` module, and `pg`'s wire behaviour is to render every value to text (or pass a
-`Buffer`) and let the server resolve the type from context. Any divergence from that is a bug by
-definition, however reasonable the other value looks. Reusing `pg`'s own `prepareValue` - ported into
-`src/prepare-value.ts` rather than imported, since a facade that replaces `pg` cannot depend on it -
-means the policy cannot drift from `pg` type by type as either library gains encoders.
+A declared type does not only decide whether a parameter resolves. **It decides the type of any
+result column derived from it**, and it decides which of PostgreSQL's two paths the value takes -
+input parsing for text, assignment cast for a typed value:
 
-`inferParameterTypes: true` is the escape hatch for anyone who wants PostgreJS's typed binary
-encoders back, now that they are 27/28 rather than 23/28.
+```
+  select $1 as x                with 7      pg  text / '7'    declared  int4 / 7
+  select $1 * 2                 with 1.5    pg  22P02         declared  3.0
+  insert into t (q bigint)      with 2.7    pg  22P02         declared  writes 3
+```
 
-### The two PostgreJS defects this turned up - both since fixed
+The last one is the argument. `insert into t (q) values (2.7)` in plain SQL writes **3** - assigning
+a numeric value to an integer column is an assignment cast and those round. `pg`'s `22P02` is what
+PostgreSQL does with the *string* `'2.7'`, which is a consequence of the only technique `pg` has for
+letting the server resolve a parameter from context, not a check it performs. Handed a JS number,
+PostgreJS produces what the database produces for a number.
+
+It is not free, and the price was measured rather than argued. Declaring numbers took TypeORM's own
+functional suite from **806/806 to 739/806**. Bisected, those sixty-seven are `number` on its own:
+handing numbers over reproduces all of them, and handing over booleans, boolean arrays and plain
+objects costs none.
+
+**And the cause was not the policy.** It was TypeORM sending `1` for a `boolean` column (§5.4). With
+that corrected the suite is 806/806 with numbers declared, which is what made this the default.
+
+Rendering a number to text loses nothing, which was the other thing worth checking: thirty shapes -
+`0.1`, `0.30000000000000004`, `5e-324`, `1.7976931348623157e308`, `1e21`, `1e-7`,
+`Number.MAX_SAFE_INTEGER`, `-0` among them - against `numeric`, `float8` and `int8`, **zero
+differences from `pg`**. `String(n)` on a double is the shortest representation that round-trips.
+So the cost of the old policy was never precision; it was the type.
+
+### 5.4 `src/typeorm-boolean.ts`, which is a workaround
+
+`PostgresDriver.preparePersistentValue` has, for every version in the peer range:
+
+```ts
+if (columnMetadata.type === Boolean) return value === true ? 1 : 0
+```
+
+PostgreSQL has a real `boolean`, so there is nothing to gain by it. It survives because `pg`
+declares no type and sends it as text, and `'1'::boolean` is valid input - the integer never reaches
+the column as an integer. Any client that declares a type gets
+`42804 column "x" is of type boolean but expression is of type integer`.
+
+This package patches it on import, **against the no-fixups rule in `CLAUDE.md` and on an explicit
+decision**. Nothing is lost: TypeORM's suite is 806/806 with it, and the `pg` control in the same
+invocation also ran patched and also stayed 806/806, since PostgreSQL accepts `'true'` and `'1'`
+alike. It is global, because patching a prototype is, and benign for that same reason.
+`TYPEORM_POSTGREJS_NO_BOOLEAN_PATCH=1` skips it. **Remove it when TypeORM fixes it.**
+
+It patches the TypeORM it can resolve, which in an application is the one the application uses.
+`scripts/run-typeorm-suite.sh` is not an application - it runs TypeORM's tests from a checkout with
+no `node_modules/typeorm` in it - so it names the module with `TYPEORM_POSTGREJS_TYPEORM`. Without
+that the patch silently did nothing for a whole run and the sixty-seven came back unchanged.
+
+### 5.5 Why nothing is rendered any more
+
+Binding at OID 0 used to mean `new BindParam(0, prepareValue(v))`. It had to: PostgreJS wrote an
+undeclared parameter with `String(v)`, which produced `[object Object]` for a plain object, for an
+object inside an array, and for any value whose class implements `toPostgres()` - `pg`'s own
+extension point. Reported upstream and fixed in `a11a9af`, which writes an undeclared parameter the
+way `pg` writes one, `toPostgres()` re-entering the same dispatch.
+
+Re-measured against that build, every shape that still takes this branch - `true`, `false`, a
+boolean array, a plain object, a nested object, a caller's `toPostgres()` class, a `Buffer`, an
+object carrying a `Date` - is byte-identical to `pg` **with no rendering at all**. So there is none.
+
+Two differences remain between an undeclared parameter here and under `pg`, both declined upstream
+and both read identically by the server: a `Date` is written with a space where `pg` writes `T`, and
+a number array as `{1,2,3}` where `pg` writes `{"1","2","3"}`. The second is why a 100 000-element
+`int4[]` is 1 100 146 bytes here against `pg`'s 1 300 124.
+
+### 5.6 The three policies, and what `prepare-value.ts` is for
+
+`inferParameterTypes` selects between them:
+
+| value | what it does |
+| --- | --- |
+| unset | §5.1 - the default |
+| `true` | hand every value over, including numbers' neighbours; PostgreJS types all of it |
+| `false` | render every value with `pg`'s own function and declare nothing: `pg` byte for byte |
+
+`false` exists because this is a `pg` facade and code that depends on `pg`'s answers exactly -
+including the ones where `pg` loses information - must have a way to keep them. It is the only
+caller of `src/prepare-value.ts`, which is a port of `pg`'s own function held to it by a test that
+calls both. `parseInputDatesAsUTC` has meaning only there, for the same reason.
+
+The three were scored on 28 query shapes during the recon round, before any of the upstream fixes:
+`raw` 23/28, `bind0` 23/28, `pgwire` 28/28. Both of the first two reached 27/28 once the defects in
+§5.7 were fixed, and the remaining case - `[]` and `[null]`, which `determine()` could not type -
+is closed too. **The score stopped being the argument some time ago**; what decides it now is which
+answer is right for the value the caller passed, which is §5.3.
+
+### 5.7 The pinned divergences
+
+`pg` is the oracle for every parameter shape except two, and in both `pg` is the one losing
+information. They are pinned on *both* sides in `test/B-live/params.spec.ts` - a change on either
+fails - rather than skipped:
+
+| | `pg` | here |
+| --- | --- | --- |
+| `select $1` with `12` | `'12'` (string) | `12` (number) |
+| `select $1 * 2` with `1.5` | `22P02` | `'3.0'` |
+
+A parameter with nothing around it to resolve from is the only place this shows. Everywhere else -
+a column, a comparison, a function argument - the context decides and both land on the same value,
+which is why the rest of the matrix and the differential suite are untouched by it.
+
+### 5.8 The two PostgreJS defects this turned up - both since fixed
 
 Both were in PostgreJS itself, both silently corrupted data, and **both affected `postgrejs-kysely`** - its `_params` (`src/postgrejs-connection.ts:229-244`) wraps only scalars and leaves `Date`
-and arrays to PostgreJS's encoders, which is precisely the `bind0` column above.
+and arrays to PostgreJS's encoders, which is precisely the `bind0` policy in §5.6.
 `postgrejs-drizzle` is shielded by accident: drizzle stringifies arrays and dates in its own column
 encoders before the driver sees them.
 

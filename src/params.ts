@@ -23,7 +23,7 @@ import { prepareValue } from './prepare-value.js';
  * Would PostgreJS declare a type for this value, where `pg` declares none?
  * Those are bound at OID 0; the rest are handed over.
  *
- * The list is measured rather than reasoned - `doc/DRIVER-DESIGN.md` §5 has
+ * The list is measured rather than reasoned - `doc/DRIVER-DESIGN.md` §5.2 has
  * the table and how it was arrived at - and
  * `test/B-live/params.spec.ts` pins it against a live server, because a
  * value moving between the two groups upstream is a correctness change here
