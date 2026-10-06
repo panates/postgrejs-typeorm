@@ -86,6 +86,19 @@ const CASES: [string, string, any[]][] = [
   ['bare parameter, string', 'select $1 v', ['abc']],
   ['bare parameter, null', 'select $1 v', [null]],
   ['arithmetic on an undeclared parameter', 'select $1 * 2 v', [1.5]],
+  /**
+   * **The one that does not raise anything.** `round($1)` resolves `$1` to
+   * `double precision` when nothing declares it, and `round(float8)` is
+   * banker's rounding - `round(2.5)` is 2, `round(0.5)` is 0. Declared
+   * `numeric` it is round-half-away-from-zero: 3 and 1.
+   *
+   * Neither is wrong and both are PostgreSQL's own, but the difference is
+   * silent and lands on money. A JS number *is* a double, so `pg`'s answer
+   * is arguably the more faithful reading of the value; ours is the more
+   * faithful reading of what the caller probably meant. Pinned so that it
+   * is a recorded decision rather than something a user finds in a total.
+   */
+  ['round of a half', 'select round($1) v', [2.5]],
   ['arithmetic on an undeclared integer', 'select $1 + 1 v', [12]],
 ];
 
@@ -169,6 +182,8 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
       pg: 'err:22P02',
       ours: 'ok:string:3.0',
     },
+    // float8 rounds half to even, numeric rounds half away from zero.
+    'round of a half': { pg: 'ok:number:2', ours: 'ok:string:3' },
   };
 
   for (const [label, sql, values] of CASES) {
@@ -191,7 +206,7 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
     const labels = new Set(CASES.map(([l]) => l));
     for (const key of Object.keys(INTENDED))
       assert.ok(labels.has(key), `INTENDED names a case not run: ${key}`);
-    assert.strictEqual(Object.keys(INTENDED).length, 2);
+    assert.strictEqual(Object.keys(INTENDED).length, 3);
   });
 
   /**
