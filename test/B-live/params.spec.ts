@@ -148,11 +148,16 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
    *
    * The two are not the same kind of difference. `select $1` has nothing to
    * resolve from, so an undeclared parameter stays `text` and `pg` hands
-   * back the string it sent. `select $1 * 2` has plenty - the server
-   * resolves `$1` to `integer` from the `* 2` on its own, which is why
-   * `pg`'s `22P02` is correct and the same statement with `2` returns `4`
-   * under it. Declaring `numeric` does not recover something `pg` lost; it
-   * makes the multiplication a `numeric` one.
+   * back the string it sent - that one is `pg` returning less than it was
+   * given.
+   *
+   * `select $1 * 2` has plenty of context and the server uses it: `prepare
+   * p as select $1 * 2` answers `integer` with no client involved, because
+   * `2` is an `int4`. `pg` then sends the value as **text**, which is how
+   * declaring nothing is implemented, so `'1.5'` has to be read as an
+   * integer and `22P02` is the right answer to that. The same statement
+   * with `2` returns `4` under `pg`. Declaring `numeric` here does not
+   * recover anything - it changes what the expression resolves to.
    *
    * Both sides are pinned rather than the case skipped - a change on either
    * one fails here, so this records a decision instead of excusing a
