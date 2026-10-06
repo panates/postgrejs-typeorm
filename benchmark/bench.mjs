@@ -378,6 +378,24 @@ const doMechanisms =
   (!args.includes('--latency') && !args.includes('--memory'));
 const scenarios = scenariosMatching(which);
 
+/**
+ * A filter that matches nothing is a typo, not a request for an empty run.
+ *
+ * `scenariosMatching` compares against a lower-cased group, so `write`
+ * matches and `Write` does not - and the pass that followed wrote a results
+ * file with an empty section in it, which is the same way a partial run
+ * once dropped half the data. Fail here instead.
+ */
+if (!scenarios.length) {
+  const groups = [...new Set(scenariosMatching('all').map(s => s.group))];
+  console.error(
+    `no scenarios match "${which}". Groups: ${groups
+      .map(g => g.toLowerCase())
+      .join(', ')}, or "all".`,
+  );
+  process.exit(1);
+}
+
 await seed();
 
 /**

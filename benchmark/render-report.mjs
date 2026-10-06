@@ -246,16 +246,18 @@ factor of nine:
 
 \`\`\`
                                   pg      here      gap
-  1 parameter                   8.2      13.8      5.6      +68%
-  1 parameter, returning id    10.3      14.1      3.8      +37%
-  5 parameters                  9.0      15.4      6.5      +72%
-  5 parameters, returning *    17.0      18.4      1.4       +8%
-  10 rows of 5                 23.2      31.3      8.1      +35%
+  1 parameter                   8.1      13.4      5.3      +66%
+  1 parameter, returning id    10.5      14.4      3.9      +37%
+  5 parameters                 10.2      14.6      4.4      +43%
+  5 parameters, returning *    17.3      19.9      2.6      +15%
+  10 rows of 5                 23.8      30.4      6.6      +28%
 \`\`\`
 
 Nothing about either client changes across those five; the denominator does. A row that asks for
-one small statement is near the top of that range by construction, and the three rows above are
-the three smallest statements in the set.
+one small statement is near the top of that range by construction. **Returning anything at all is
+what moves it most**, because until the statement gives the decoder work the comparison excludes
+the only thing this package is faster at - which is why the write scenarios here carry a row of
+mixed columns and read the key back, the way TypeORM's own insert does.
 
 Most of the gap is not this package. The same one-parameter statement, one client per process,
 medians of three: \`pg\` 8.4 KB a call, PostgreJS with nothing on it 12.9, this facade 14.2 - so

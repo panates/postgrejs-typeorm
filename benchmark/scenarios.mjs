@@ -224,6 +224,10 @@ export const DDL = [
      age integer,
      balance numeric(20,6),
      tags text[],
+     created_at timestamptz,
+     active boolean,
+     meta jsonb,
+     ref uuid,
      blob bytea,
      numbers integer[]
    )`,
@@ -276,6 +280,14 @@ export const Write = new EntitySchema({
   columns: {
     id: { type: 'int', primary: true, generated: 'increment' },
     name: { type: 'text', nullable: true },
+    email: { type: 'text', nullable: true },
+    age: { type: 'int', nullable: true },
+    balance: { type: 'numeric', precision: 20, scale: 6, nullable: true },
+    tags: { type: 'text', array: true, nullable: true },
+    created_at: { type: 'timestamptz', nullable: true },
+    active: { type: 'boolean', nullable: true },
+    meta: { type: 'jsonb', nullable: true },
+    ref: { type: 'uuid', nullable: true },
     blob: { type: 'bytea', nullable: true },
   },
 });
@@ -372,6 +384,40 @@ export function openDatabases(pooled = false, level = 'raw', only) {
 }
 
 const q = (db, sql, params) => db.query(sql, params);
+
+/**
+ * **What a row is, in one place, because three scenarios need the same
+ * answer and a benchmark cannot have three of them.**
+ *
+ * Mixed on purpose. A write row of nothing but short text measures a
+ * client's call overhead and calls it an insert: both clients render text
+ * the same way, so the only thing left in the figure is what each pays per
+ * statement. The types below are the ones an application actually stores
+ * and the ones the two clients treat differently - a `numeric` that `pg`
+ * sends and reads as a string, an array, a `jsonb`, a `uuid`, a `boolean`,
+ * and a `Date`.
+ *
+ * The `Date` is deliberate twice over. It is what a row carries, and until
+ * it was here **no scenario in this file bound one** - so an upstream
+ * change that binds a reused `Date` as binary against the type the server
+ * resolved (`11cfb77`) moved nothing here and could not be seen at all.
+ */
+export const WRITE_COLUMNS =
+  'name, email, age, balance, tags, created_at, active, meta, ref';
+
+const WRITE_EPOCH = Date.UTC(2026, 0, 1);
+
+export const writeRow = i => [
+  `Customer account ${i} - northern region, renewed`,
+  `accounts.payable.${i}@long-company-domain-name.example.com`,
+  (i % 60) + 18,
+  `${1000 + (i % 500)}.459900`,
+  ['priority', 'renewed', 'northern', `cohort-${i % 12}`],
+  new Date(WRITE_EPOCH + i * 86400000),
+  i % 2 === 0,
+  { region: 'north', tier: i % 5, flags: ['renewed', 'priority'] },
+  `6ba7b810-9dad-11d1-80b4-${String(100000000000 + (i % 899999999999)).slice(0, 12)}`,
+];
 
 /**
  * Each one is a single call, the way a caller would write it.
@@ -596,46 +642,53 @@ export const SCENARIOS = [
     name: 'insert 500 rows',
     group: 'Write',
     level: 'raw',
-    note: '500 rows in 1 statement, 2500 parameters',
+    note: '500 rows of 9 mixed columns in 1 statement, 4500 parameters',
     iters: 5,
     pairs: 61,
     run: (db, i) => {
       const values = [];
       const params = [];
       for (let k = 0; k < 500; k++) {
-        const n = k * 5;
-        values.push(`($${n + 1}, $${n + 2}, $${n + 3}, $${n + 4}, $${n + 5})`);
-        params.push(
-          `name-${i}-${k}`.padEnd(40, 'x'),
-          `e${k}@example.com`,
-          (k % 60) + 18,
-          '12.345678',
-          ['a', 'b'],
+        const n = k * 9;
+        values.push(
+          `(${Array.from({ length: 9 }, (_, c) => `$${n + c + 1}`).join(',')})`,
         );
+        params.push(...writeRow(i * 500 + k));
       }
       return q(
         db,
-        `insert into ${SCHEMA}.writes (name, email, age, balance, tags)
+        `insert into ${SCHEMA}.writes (${WRITE_COLUMNS})
            values ${values.join(',')}`,
         params,
       );
     },
   },
   {
-    /* Comes out level, and for the same kind of reason as `box` above: the
-     * socket counter reads 1270 KB out on *both* sides, byte for byte. Every
-     * parameter here goes through `pg`'s own `prepareValue` and then out
-     * under OID 0 - the policy that makes a parameter behave exactly as
-     * `pg`'s does, documented in CLAUDE.md and `src/params.ts` - so a JS
-     * array becomes the same array literal `pg` would have sent. This row is
-     * what that costs: a dialect that lets PostgreJS encode the array
-     * measures 1.38x and 94% less allocated on the same shape. It is the
-     * send-side counterpart of the `int4[]` read, which is 4x the other way
-     * because *reading* is where this facade keeps the binary form. */
+    /**
+     * **The send-side counterpart of the `int4[]` read**, and it came level
+     * for two years' worth of this file's history. The note is kept because
+     * what changed is instructive.
+     *
+     * Both clients still put *text* on the wire - the socket counter reads
+     * about 1.1-1.3 MB out on either side, and neither sends the binary
+     * array format. PostgreSQL's binary array carries a mandatory 4-byte
+     * length per element whatever the element is, so for `int4` it is 8
+     * bytes an element against `digits + 1` as text; text is the cheaper
+     * encoding below 7-8 digits and this array is below it.
+     *
+     * What changed is **who builds that text**. Every parameter used to go
+     * through `pg`'s own `prepareValue` first, which concatenates the
+     * literal; now an array is handed to PostgreJS, which writes the digits
+     * straight into its own buffer. Same bytes, same declared type (none),
+     * a fraction of the garbage - 27.2 MB a call becomes under 1 MB.
+     *
+     * So this row no longer measures the cost of a policy. It measures the
+     * difference between two ways of producing the same bytes.
+     */
     name: 'write a 100k int4[]',
     group: 'Write',
     level: 'raw',
-    note: '1 parameter holding 100 000 values, text on both sides',
+    note: '1 parameter holding 100 000 values, text on both sides, built by each client',
     iters: 3,
     pairs: 41,
     run: (db, i) =>
@@ -650,18 +703,44 @@ export const SCENARIOS = [
     name: 'twenty inserts in a transaction',
     group: 'Write',
     level: 'raw',
-    note: '20 rows, one statement each, inside one transaction',
+    note: '20 rows of 9 mixed columns, one statement each, returning the key, in one transaction',
     iters: 3,
     pairs: 61,
-    /* On the connection the scenario already holds, which is where a
+    /**
+     * On the connection the scenario already holds, which is where a
      * TypeORM transaction runs: `QueryRunner.startTransaction()` sends BEGIN
-     * on the connection it checked out, not a fresh one. */
+     * on the connection it checked out, not a fresh one.
+     *
+     * **Each insert writes a row and reads the key back**, because both
+     * halves of that are what TypeORM sends. Captured off the wire, saving
+     * an entity is `INSERT INTO ... VALUES ($1, DEFAULT) RETURNING "id"` -
+     * so a scenario that writes one short column and returns nothing is
+     * neither the shape of a row nor the statement the consumer issues.
+     *
+     * It is not a detail. The same insert, allocation per call, `pg`
+     * against this facade:
+     *
+     * ```
+     *   1 token column, no returning     8.58  ->  13.43   +57%
+     *   5 token columns                  9.52  ->  14.92   +57%
+     *   5 columns of real content       10.63  ->  15.42   +45%
+     *   the same, returning the row     19.22  ->  19.42    +1%
+     * ```
+     *
+     * Payload helps a little; returning anything at all is what moves it,
+     * because until the statement gives the decoder work the comparison
+     * excludes the only thing this package is faster at. A write row with
+     * no result is a measurement of call overhead wearing the word
+     * "insert".
+     */
     run: async (db, i) => {
       await db.query('begin');
       for (let k = 0; k < 20; k++)
-        await db.query(`insert into ${SCHEMA}.writes (name) values ($1)`, [
-          `t${i}-${k}`,
-        ]);
+        await db.query(
+          `insert into ${SCHEMA}.writes (${WRITE_COLUMNS})
+             values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`,
+          writeRow(i * 20 + k),
+        );
       await db.query('commit');
     },
   },
@@ -782,13 +861,39 @@ export const SCENARIOS = [
       }),
   },
   {
+    /**
+     * **An entity with something in it.** It assigned one short column
+     * until 2026-10-06, which made it a measurement of what a `save` costs
+     * before it has anything to save - see `twenty inserts in a
+     * transaction` for the sweep that settled this, where the same insert
+     * runs +57% at one token column and +1% at five real ones returning
+     * the row.
+     *
+     * TypeORM already returns the key here whatever the columns are, so
+     * this row only needed the other half: a row carrying what a row
+     * carries.
+     */
     name: 'save one entity',
     group: 'Write',
     level: 'orm',
-    note: '1 entity of 1 assigned column',
+    note: '1 entity of 9 assigned columns, mixed types',
     iters: 50,
     pairs: 201,
-    run: (ds, i) => ds.getRepository('BenchWrite').save({ name: `n${i}` }),
+    run: (ds, i) => {
+      const [name, email, age, balance, tags, created_at, active, meta, ref] =
+        writeRow(i);
+      return ds.getRepository('BenchWrite').save({
+        name,
+        email,
+        age,
+        balance,
+        tags,
+        created_at,
+        active,
+        meta,
+        ref,
+      });
+    },
   },
 ];
 
