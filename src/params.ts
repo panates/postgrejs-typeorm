@@ -3,34 +3,43 @@ import type { ResolvedFacadeOptions } from './config.js';
 import { UNSPECIFIED_OID } from './constants.js';
 import { prepareValue } from './prepare-value.js';
 
-/**
- * Parameters, the way `pg` sends them: every value rendered to text (or left
- * a `Buffer`) and declared OID 0, so PostgreSQL resolves each one from where
- * its placeholder appears.
+/*
+ * Parameters. Nothing is rendered: a value PostgreJS would otherwise declare
+ * a type for is bound at OID 0, where it writes what `pg` writes, and
+ * everything else is handed over - PostgreJS already sends it untyped.
  *
- * This is the whole policy, and it is deliberately not "wrap scalars in
- * `BindParam(0, v)` and leave the rest to PostgreJS's typed encoders", which
- * is what `postgrejs-kysely` and `postgrejs-drizzle` do. Measured over 28
- * query shapes against `pg` (`doc/DRIVER-DESIGN.md` §5):
+ * `inferParameterTypes` picks a different policy: `true` hands every value
+ * over, `false` renders every value with `pg`'s own function and declares
+ * nothing, which is `pg` byte for byte.
  *
- * | policy | score |
- * | --- | --- |
- * | leave everything to PostgreJS | 27/28 |
- * | `BindParam(0, v)` for scalars only | 27/28 |
- * | **this one** | **28/28** |
- *
- * The one PostgreJS misses is an empty array, and an all-null array with it:
- * `determine()` picks an array's type from `value[0]`, which is `undefined`
- * for `[]` and `null` for `[null]`, so neither is typed and the server
- * answers `22P02 malformed array literal: ""`. Rendering to `{}` / `{NULL}`
- * and letting the server resolve it sidesteps that.
- *
- * But the score is not really the argument. The facade's contract is to *be*
- * the `pg` module, so any divergence from what `pg` puts on the wire is a
- * bug by definition, however reasonable the other value looks. Reusing `pg`'s
- * own rendering (`prepare-value.ts`) means this cannot drift from it type by
- * type as either library gains decoders.
+ * **Why those three and what each costs is `doc/DRIVER-DESIGN.md` §5**, with
+ * the measurements. The short version is that a declared type does not only
+ * decide whether a parameter resolves - it also decides the type of a result
+ * column derived from it - and that a number is the one value this package
+ * lets PostgreJS declare.
  */
+
+/*
+ * Would PostgreJS declare a type for this value, where `pg` declares none?
+ * Those are bound at OID 0; the rest are handed over.
+ *
+ * The list is measured rather than reasoned - `doc/DRIVER-DESIGN.md` §5.2 has
+ * the table and how it was arrived at - and
+ * `test/B-live/params.spec.ts` pins it against a live server, because a
+ * value moving between the two groups upstream is a correctness change here
+ * and nothing else would notice.
+ */
+function postgrejsWouldDeclare(v: any): boolean {
+  // One line per JS type, each saying what PostgreJS does with it. The last
+  // line is **not** a general fallthrough - the test above it has already
+  // returned for everything that is not an object.
+  if (v === null || v === undefined) return false; // untyped, as `pg` sends
+  if (typeof v === 'boolean') return true; // -> `bool`
+  if (Array.isArray(v)) return v.some(e => typeof e === 'boolean'); // -> `bool[]`
+  if (typeof v !== 'object') return false; // a number or a string: see below
+  return !(v instanceof Date); // a plain object -> `json`; a `Date`, untyped
+}
+
 export function toBindParams(
   values: readonly any[] | undefined,
   options: ResolvedFacadeOptions,
@@ -39,6 +48,15 @@ export function toBindParams(
   const l = values.length;
   const out = new Array(l);
   let i: number;
+  if (options.inferParameterTypes === false) {
+    // Exactly `pg`: render everything, declare nothing.
+    const utcAll = options.parseInputDatesAsUTC;
+    for (i = 0; i < l; i++) {
+      const rendered = prepareValue(values[i], undefined, utcAll);
+      out[i] = new BindParam(UNSPECIFIED_OID, rendered);
+    }
+    return out;
+  }
   if (options.inferParameterTypes) {
     // The escape hatch: hand the values over untouched and let PostgreJS
     // derive an OID from each. Keeps the binary encoders in play, at the
@@ -47,14 +65,14 @@ export function toBindParams(
     for (i = 0; i < l; i++) out[i] = values[i];
     return out;
   }
-  const utc = options.parseInputDatesAsUTC;
-  let v: string | Buffer | null;
   for (i = 0; i < l; i++) {
-    v = prepareValue(values[i], undefined, utc);
-    // A Buffer goes as bytes. `pg` sends it as a binary parameter and
-    // PostgreJS does the same when it is handed one directly, so there is
-    // nothing to declare.
-    out[i] = Buffer.isBuffer(v) ? v : new BindParam(UNSPECIFIED_OID, v);
+    // Two outcomes, and neither renders anything. A value PostgreJS would
+    // declare a type for is bound at OID 0 instead, where it writes the same
+    // text `pg` writes; everything else is handed over, because PostgreJS
+    // already sends it untyped for the same reasons `pg` does.
+    out[i] = postgrejsWouldDeclare(values[i])
+      ? new BindParam(UNSPECIFIED_OID, values[i])
+      : values[i];
   }
   return out;
 }

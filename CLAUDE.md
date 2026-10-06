@@ -75,9 +75,19 @@ the only remaining advantage. Do not reopen that without new evidence.
 
 ## Where things are
 
-- **PostgreJS**: `../postgrejs`. Its `CLAUDE.md` describes the internals. Peer is **`>=3.10.0 <4`**,
-  and that floor is exact rather than cautious - `src/` uses six things that all landed in 3.10.0
-  and nothing works without them:
+- **PostgreJS**: `../postgrejs`. Its `CLAUDE.md` describes the internals. Peer is
+  **`>=3.13.0 <4`**, and that floor is exact rather than cautious. **3.13.0** is where the
+  parameter policy's two requirements landed, both found here:
+
+  | what `src/` needs | upstream |
+  | --- | --- |
+  | a non-integer scalar declared `numeric`, not `float8` - without it `$1::money` with `12.34` is `42846` | `341f343` |
+  | an undeclared parameter written the way `pg` writes one - without it a plain object bound at OID 0 is `[object Object]` | `a11a9af` |
+
+  Verified by behaviour rather than by version number before the floor was moved.
+
+  The floor was `>=3.10.0` until 2026-10-06, for six things that landed in 3.10.0 and that `src/`
+  still uses - kept here because the table is the history of what this package has needed:
 
   | what `src/` needs | upstream |
   | --- | --- |
@@ -134,7 +144,25 @@ that was expensive to arrive at, with the reason next to it.
 - `prepare-value.ts` - `pg`'s own parameter rendering, **ported, not imported**. A facade whose
   purpose is to replace `pg` cannot depend on `pg` at runtime. Held to the original by a test that
   calls both.
-- `params.ts` - the policy: `prepareValue()` then OID 0, for everything.
+- `params.ts` - the policy, and **nothing is rendered on its default path**. A value PostgreJS
+  would declare a type for is bound at OID 0 instead, where since `a11a9af` it writes exactly what
+  `pg` writes - measured byte for byte over eight shapes, a caller's own `toPostgres()` class
+  among them. Everything else is handed over untouched, because PostgreJS already sends it untyped
+  for the same reasons `pg` does.
+
+  **A number is the one deliberate divergence from `pg`.** It is declared, so
+  `insert into t (q bigint) values ($1)` with `2.7` writes `3` - what plain SQL does with the
+  literal - where `pg` sends text and the input parser refuses it. `select $1 * 2` works for the
+  same reason. Pinned on both sides in `test/B-live/params.spec.ts` rather than skipped.
+
+  `inferParameterTypes` is three-state: unset is the above, `true` hands everything over, `false`
+  renders everything with `pg`'s own function and is `pg` byte for byte. `prepare-value.ts` exists
+  for that third mode now, and is still held to `pg`'s function by a test that calls both.
+- `typeorm-boolean.ts` - **a workaround, here on an explicit decision against the rule below.**
+  TypeORM's own driver sends `1` for a `boolean` column, which only works because `pg` declares
+  nothing for a parameter. It is sixty-seven of TypeORM's own tests and a broken insert in any
+  application with a boolean column. Applied on import; `TYPEORM_POSTGREJS_NO_BOOLEAN_PATCH=1`
+  skips it. **Remove it when TypeORM fixes it.**
 - `constants.ts` - the `fetchAsString` OID list. **An array OID there behaves differently from a
   scalar one** - it makes the whole literal come back as one string - so it belongs there only where
   `pg` also returns a string. That is the geometric family except `point[]`.
@@ -169,6 +197,20 @@ Tests come in three kinds and the split is the point:
   `postgres-interval` major, and that TypeORM's own `columnsSql` has no `ORDER BY` so
   `getTable().columns` comes back in a plan-dependent order for *both* drivers.
 
+`benchmark/` is the performance harness and is four files on purpose - `scenarios.mjs` is imported
+by both the timing pass and the memory workers, so the two cannot describe different work;
+`render-report.mjs` runs nothing, so `doc/BENCHMARKS.md` can be rewritten without re-measuring;
+`heap-worker.mjs` is one child process per client, because a baseline taken with both alive has
+their pools under it rather than in it. It is plain `.mjs` against `build/` for the same reason -
+a TypeScript loader inside the baseline window gives the number away. `benchmark/results/latest.json`
+is committed and is what the document is generated from.
+
+Two things about it are easy to get wrong and are written up where they live: there is **no shape
+where neither client wins**, so the control row is read on magnitude against the read rows rather
+than on the sign test, and the control does not control for *allocation* at all, because a fixed
+per-call cost has no term that scales with server time. `.claude/latency-is-half-the-benchmark.md`
+is the handoff this was built from and is worth reading before changing any of it.
+
 `scripts/run-typeorm-suite.sh` runs TypeORM's own functional suite against the facade. Read its
 header before changing it; two things there are not obvious:
 
@@ -193,10 +235,12 @@ re-checked in the TypeORM round wherever its expectations differ - the entries b
   so a plain string arrives declared `varchar` and PostgreSQL stops inferring from context -
   inserting into a `json` column, `coalesce($1, 1)`, `$1 || x` and every overloaded function fail.
   `pg` sends OID 0 (unspecified). `new BindParam(0, value)` asks PostgreJS for the same.
-  **OID 0 alone is not enough for a facade** - measured 23/28 against `pg`, because PostgreJS's typed
-  encoders still run for `Date`, arrays and objects. What works is `pg`'s own `prepareValue(v)`
-  *first*, then OID 0: 28/28. Render the value the way `pg` renders it rather than only asking for
-  the same declared type. See `doc/DRIVER-DESIGN.md` §5.
+  **PostgreJS sends most of them unspecified itself now** - a string, a `Date`, an array - so the
+  facade hands those over and binds only what PostgreJS would otherwise type. Nothing is rendered:
+  since `a11a9af` an undeclared parameter is written the way `pg` writes one, measured byte for
+  byte. A number is the one value left declared, deliberately. `doc/DRIVER-DESIGN.md` §5 is the
+  whole of it, and the history - `prepareValue(v)` then OID 0 for everything scored 28/28 against
+  23/28 and was the policy until 2026-10-06 - is §5.6.
 - **`rowsAffected` is a number**, set for INSERT/UPDATE/DELETE/MERGE. `QueryResult` also carries
   `command`, `fields`, `rowType`, `rows`.
 - **`rollbackOnError` defaults to true** - every statement inside a transaction runs under a
@@ -206,15 +250,14 @@ re-checked in the TypeORM round wherever its expectations differ - the entries b
   `'error'` as a `ConnectionLostError` - `code` `'08006'`, `processID`, the socket error as `cause`.
   The in-flight query rejects with the same object. `pg` does neither: it rejects the query with the
   server's own `57P01` and raises nothing on the pool.
-- **Two PostgreJS defects, both silently corrupting data, both reaching `postgrejs-kysely` today.**
-  Found in this round and written up in `doc/DRIVER-DESIGN.md` §5. Until they are fixed upstream, do
-  not hand PostgreJS a `Date` or a JS array as a parameter:
-  - a `Date` **does not round-trip through a `timestamptz` column** - the instant shifts by the
-    local offset. Invisible whenever the session's `TimeZone` and the process's zone agree - not
-    merely at UTC. **Fixed upstream**: a `Date` now goes out untyped, as text carrying the process's
-    own offset, which is what `pg` sends.
-  - the binary array encoder writes **lower bound 0** (`../postgrejs/src/util/encode-binaryarray.ts:31`),
-    so `arr[1]` returns the second element and `array_lower` reports 0.
+- **Two PostgreJS defects this package found, both silently corrupting data, both since fixed
+  upstream.** Written up in `doc/DRIVER-DESIGN.md` §5.8, and kept there because they are why the
+  parameter policy was what it was for most of this package's history:
+  - a `Date` did not round-trip through a `timestamptz` column - the instant shifted by the local
+    offset, invisible whenever the session's `TimeZone` and the process's zone agreed, not merely at
+    UTC. A `Date` now goes out untyped, carrying the process's own offset, which is what `pg` sends.
+  - the binary array encoder wrote **lower bound 0**, so `arr[1]` returned the second element and
+    `array_lower` reported 0.
 - **Cursors read through a portal**, which lives only as long as the transaction that created it.
   Any other statement on the same connection destroys it. TypeORM streams through `pg-query-stream`,
   and **it maps**: `QueryStream.submit()` drives pg's private protocol object, but TypeORM only ever
@@ -256,6 +299,30 @@ divergence rather than remove one.
 Whether the facade is `pg`-faithful by default, PostgreJS-faithful by default, or configurable is
 still **the** design decision - it is **D1** in `doc/DRIVER-DESIGN.md`, now with the cost of each
 option priced, and it is yours to make.
+
+## Release and tooling - rman 2.x
+
+`.rmanrc.yml` is one line, `extends: '@panates/rman-preset'`, and that is deliberate: **the ground
+truth is `rman config --from-root`, never the preset's source.** Reading the preset here would have
+been wrong - 1.6.0 carries neither `group: false` nor `changelog.unreleased` nor
+`version.changelog`, because rman 2.7 absorbed all three as its own defaults, and the resolved
+config shows them.
+
+Single-package, so **`group`, `version.cascade` and `changelog.groupBy` are all deliberately
+unset** - there is nothing to group and nothing to cascade to, and setting them would change
+nothing.
+
+What the preset owns, and what must therefore **not** come back as an npm script: `build` (its
+`before` is `rman check`, `rman lint`, `rman clean`; its `exec` is `tsc -b`; its `after` copies
+README/LICENSE, writes the build manifest and stamps the version), `lint`, `check`, `format`,
+`clean`. A leftover `build` script would silently win over the config's `exec` and keep this
+repository on its old pipeline with the config looking correct; a leftover `prebuild` would run the
+same three steps twice. `rman build` names each step as it runs, and each has to appear once.
+
+`scripts/run-typeorm-suite.sh` calls `npx rman build`. It called `npm run build` until that script
+was deleted in the same commit - the sibling that missed this exited before its first test for
+weeks, because nothing ran it. Ours runs weekly on a cron, which is why it would have been caught,
+but the fix belongs with the cause.
 
 ## Working conventions
 

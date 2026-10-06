@@ -58,10 +58,12 @@ describe('toPoolConfiguration', () => {
 });
 
 describe('resolveFacadeOptions', () => {
-  it('defaults to pg fidelity on every axis', () => {
+  it('defaults to pg fidelity on every axis but one, and leaves that unset', () => {
     const o = resolveFacadeOptions({});
     assert.strictEqual(o.decoding, 'pg');
-    assert.strictEqual(o.inferParameterTypes, false);
+    // Unset is a third policy rather than a missing `false` - see
+    // src/params.ts. `false` is the one that is pg byte for byte.
+    assert.strictEqual(o.inferParameterTypes, undefined);
     assert.strictEqual(o.parseInputDatesAsUTC, false);
     assert.strictEqual(o.normalizeErrors, true);
     assert.strictEqual(o.suppressRedundantPoolError, true);
@@ -73,6 +75,11 @@ describe('resolveFacadeOptions', () => {
     });
     assert.strictEqual(o.decoding, 'native');
     assert.strictEqual(o.inferParameterTypes, true);
+    assert.strictEqual(
+      resolveFacadeOptions({ postgrejs: { inferParameterTypes: false } })
+        .inferParameterTypes,
+      false,
+    );
   });
 
   it('leaves prepare unset so PostgreJS keeps its own default', () => {
@@ -81,5 +88,76 @@ describe('resolveFacadeOptions', () => {
       resolveFacadeOptions({ postgrejs: { prepare: false } }).prepare,
       false,
     );
+  });
+
+  it('defaults the connection pass-through to an empty object', () => {
+    assert.deepStrictEqual(resolveFacadeOptions({}).connection, {});
+  });
+});
+
+/**
+ * The translation is an allowlist, which is the right shape for turning `pg`
+ * options into PostgreJS ones and the wrong shape for everything PostgreJS
+ * has that `pg` has no name for. Those were unreachable until
+ * `postgrejs.connection` existed - `asyncErrorHandling` is the one that was
+ * noticed, and the point of these tests is that the next one is not.
+ */
+describe('toPoolConfiguration, the connection pass-through', () => {
+  it('forwards a setting the pg options have no name for', () => {
+    const cfg = toPoolConfiguration({
+      postgrejs: { connection: { asyncErrorHandling: false } },
+    });
+    assert.strictEqual(cfg.asyncErrorHandling, false);
+  });
+
+  it('forwards every such setting, not a second allowlist of them', () => {
+    const cfg = toPoolConfiguration({
+      postgrejs: {
+        connection: {
+          asyncErrorHandling: false,
+          timing: true,
+          preparedStatementCacheSize: 8,
+          keepAlive: false,
+          schema: 'app',
+          timezone: 'UTC',
+        },
+      },
+    });
+    assert.strictEqual(cfg.asyncErrorHandling, false);
+    assert.strictEqual(cfg.timing, true);
+    assert.strictEqual(cfg.preparedStatementCacheSize, 8);
+    assert.strictEqual(cfg.keepAlive, false);
+    assert.strictEqual(cfg.schema, 'app');
+    assert.strictEqual(cfg.timezone, 'UTC');
+  });
+
+  it('changes nothing when it is not given', () => {
+    assert.deepStrictEqual(
+      toPoolConfiguration({ host: 'h', port: 1 }),
+      toPoolConfiguration({ host: 'h', port: 1, postgrejs: {} }),
+    );
+  });
+
+  /**
+   * The type keeps the translated keys out, so this is about a JavaScript
+   * caller who is not held to it: the translation has to win rather than the
+   * pass-through, or one option would silently have two sources.
+   */
+  it('never lets a translated key win over the translation', () => {
+    const cfg = toPoolConfiguration({
+      host: 'real-host',
+      port: 5432,
+      max: 9,
+      postgrejs: {
+        connection: {
+          host: 'ignored',
+          port: 1234,
+          max: 1,
+        },
+      } as any,
+    });
+    assert.strictEqual(cfg.host, 'real-host');
+    assert.strictEqual(cfg.port, 5432);
+    assert.strictEqual(cfg.max, 9);
   });
 });

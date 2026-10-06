@@ -18,8 +18,10 @@ export interface PgjsFacadeOptions {
    * What values come back as.
    *
    * - `'pg'` (the default) - what `pg` returns, type for type. `numeric` and
-   *   `int8` are strings, `interval` is a `PostgresInterval`-shaped object,
-   *   `point` is `{x, y}`, ranges are strings.
+   *   `int8` are strings, `money` keeps the server's own `$12.34`, ranges are
+   *   strings, dates are `Date`s. `interval`, `point` and `circle` are
+   *   PostgreJS classes carrying `pg`'s own keys and values - see the README
+   *   for why that is a superset rather than a divergence.
    * - `'native'` - PostgreJS's own decoding, which is richer and is the
    *   reason to use PostgreJS at all: a `Numeric` that keeps every digit, a
    *   `BigInt` past 2^53, typed geometric and `Range` classes.
@@ -32,8 +34,21 @@ export interface PgjsFacadeOptions {
   decoding?: 'pg' | 'native';
 
   /**
-   * Let PostgreJS derive an OID per parameter from the JS value instead of
-   * declaring every parameter unspecified the way `pg` does.
+   * Which of the three parameter policies to use. **Leave it unset** unless
+   * you have a reason not to; see `params.ts` for what the default does and
+   * why.
+   *
+   * - unset - the default. PostgreJS types the values it types the way the
+   *   database would, `pg`'s own renderer runs for the rest.
+   * - `true` - hand every value to PostgreJS.
+   * - `false` - render every value with `pg`'s own function and declare
+   *   nothing, which is `pg` byte for byte. For code that depends on `pg`'s
+   *   answers exactly, including the ones where `pg` loses information:
+   *   `select $1` with `12` gives the string `'12'`, and `select $1 * 2`
+   *   raises `22P02`.
+   *
+   * The historical name is kept because it is what the option has always
+   * been called; it is no longer only about inferring.
    *
    * Off by default, and it is not the same thing as being faster: see
    * `params.ts` for what it changes and `doc/DRIVER-DESIGN.md` §5 for the
@@ -91,7 +106,67 @@ export interface PgjsFacadeOptions {
    * `Postgres pool raised an error` warning that `pg` never produces.
    */
   suppressRedundantPoolError?: boolean;
+
+  /**
+   * PostgreJS's own connection settings, forwarded as given.
+   *
+   * Everything this facade translates out of the `pg` options is kept out of
+   * the type, so this cannot quietly fight the translation. What is left is
+   * the part of PostgreJS that has no `pg` equivalent and therefore no `pg`
+   * option to arrive through: `keepAlive`, `schema`, `timezone`, `hosts` and
+   * `targetSessionAttrs` for failover, `channelBinding`, `buffer`,
+   * `pipeline*`, `debugLogger`, `preparedStatementCacheSize`, `timing` and
+   * `asyncErrorHandling`.
+   *
+   * It exists because the list above used to be unreachable. This file
+   * warns, forty lines down, that `{ connectionString }` is not a PostgreJS
+   * option and is silently ignored - and then did the same thing itself to
+   * every setting it had not thought of, because the translation is an
+   * allowlist. `asyncErrorHandling` is the one that was noticed: PostgreJS
+   * captures a caller-preserving async stack on every call, `pg` has no
+   * equivalent and pays nothing for it, and PostgreJS's own documentation
+   * names turning it off as what makes a benchmark against such a client
+   * fair. There was no way to turn it off from here.
+   *
+   * ```ts
+   * extra: { postgrejs: { connection: { asyncErrorHandling: false } } }
+   * ```
+   */
+  connection?: PgjsConnectionOptions;
 }
+
+/**
+ * The PostgreJS connection settings a consumer may set directly.
+ *
+ * Two groups are excluded, for two different reasons.
+ *
+ * **Translated from the `pg` options**, so setting them here would be a
+ * second source for one value: the connection target, credentials, TLS,
+ * `applicationName`, the connect timeout and the pool's own sizes.
+ *
+ * **Overridden per query**, so a value set here would be accepted and then
+ * silently lose: `rollbackOnError`, which `client.ts` pins to `false` on
+ * every call because PostgreJS otherwise wraps each statement in a
+ * savepoint, and `prepare`, which this facade already exposes at the top
+ * level of `PgjsFacadeOptions`.
+ */
+export type PgjsConnectionOptions = Omit<
+  PoolConfiguration,
+  | 'connectionString'
+  | 'host'
+  | 'port'
+  | 'user'
+  | 'password'
+  | 'database'
+  | 'applicationName'
+  | 'ssl'
+  | 'connectTimeoutMs'
+  | 'max'
+  | 'min'
+  | 'idleTimeoutMillis'
+  | 'rollbackOnError'
+  | 'prepare'
+>;
 
 /** The `pg` pool options TypeORM and knex actually pass. */
 export interface PgCompatibleConfig {
@@ -113,11 +188,16 @@ export interface PgCompatibleConfig {
 }
 
 export interface ResolvedFacadeOptions extends Required<
-  Omit<PgjsFacadeOptions, 'fetchAsString' | 'prepare' | 'decoding'>
+  Omit<
+    PgjsFacadeOptions,
+    'fetchAsString' | 'prepare' | 'decoding' | 'inferParameterTypes'
+  >
 > {
   decoding: 'pg' | 'native';
   fetchAsString?: FetchAsStringItem[];
   prepare?: boolean;
+  /** Unset is the default policy - see `params.ts`. */
+  inferParameterTypes?: boolean;
 }
 
 export function resolveFacadeOptions(
@@ -126,12 +206,13 @@ export function resolveFacadeOptions(
   const o = config.postgrejs ?? {};
   return {
     decoding: o.decoding ?? 'pg',
-    inferParameterTypes: o.inferParameterTypes ?? false,
+    inferParameterTypes: o.inferParameterTypes,
     parseInputDatesAsUTC: o.parseInputDatesAsUTC ?? false,
     fetchAsString: o.fetchAsString,
     prepare: o.prepare,
     normalizeErrors: o.normalizeErrors ?? true,
     suppressRedundantPoolError: o.suppressRedundantPoolError ?? true,
+    connection: o.connection ?? {},
   };
 }
 
@@ -153,6 +234,11 @@ export function toPoolConfiguration(
   // you end up with a pool of the default size wondering why `max` did
   // nothing.
   const cfg: PoolConfiguration = {
+    // PostgreJS's own settings first, so the translation below always wins
+    // for the keys it owns. `PgjsConnectionOptions` already excludes those,
+    // and this ordering is what keeps that true for a JavaScript caller who
+    // is not held to the type.
+    ...config.postgrejs?.connection,
     host: config.connectionString ?? config.host,
     port: config.port,
     user: config.user,

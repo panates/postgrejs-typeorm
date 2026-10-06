@@ -1,8 +1,8 @@
 name: Test
 on:
+  # `PERSONAL_ACCESS_TOKEN` is gone: every dependency here resolves from the public registry -
+  # `@panates/*` included - and there is no .npmrc, so the token had nothing to authenticate.
   workflow_call:
-    secrets:
-      PERSONAL_ACCESS_TOKEN:
 
   # Can be run manually
   workflow_dispatch:
@@ -55,23 +55,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      # `@v2`: `install: 'ci'` installs exactly what the lockfile pins, where `@v1` deleted
+      # package-lock.json first and installed whatever resolved that morning - so what CI tested was
+      # a dependency set nobody had pinned. `rman-version` replaces `@v1`'s unpinned global install,
+      # and is the floating major rather than an exact version.
       - name: Setup Environment
-        uses: panates/gh-setup-node@v1
+        uses: panates/gh-setup-node@v2
         with:
           node-version: ${{ matrix.node }}
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          rman-version: '2'
+          install: 'ci'
 
       - name: Install the typeorm version under test
         run: npm install --no-save typeorm@${{ matrix.typeorm }}
 
+      # **The preset's own commands, not npm scripts.** `lint` and `check` were root scripts; they
+      # are commands `@panates/rman-preset` contributes now, so every repository extending it spells
+      # them the same way and the flags - dpdm's exit code above all, since it reports a cycle and
+      # still exits 0 without one - are pinned in one place.
       - name: Run linter test
-        run: npm run lint
+        run: rman lint
 
       - name: Run circular dependency test
-        run: npm run check
+        run: rman check
 
-      - name: Run compile test
-        run: npm run compile
+      # Was `npm run compile`, the same `tsc -b ... --noEmit` under a name that read like a build.
+      # The preset contributes no typecheck command - it builds with `tsc -b` and this is the
+      # no-emit half - so it stays an npm script.
+      - name: Run type check
+        run: npm run typecheck
 
       - name: Run unit tests
         run: npm run citest

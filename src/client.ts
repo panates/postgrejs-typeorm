@@ -23,7 +23,7 @@ export interface PgQueryConfig {
   rowMode?: string;
 }
 
-/**
+/*
  * The per-query options every statement goes out with.
  *
  * - `rowDecoder: 'object'` because `pg` hands back objects. Not the
@@ -65,7 +65,7 @@ export function buildQueryOptions(o: ResolvedFacadeOptions): QueryOptions {
  * way, so the two consumers share it.
  */
 export class PgClient extends EventEmitter {
-  /**
+  /*
    * Returns this client to the pool it came from. Assigned by `PgPool` when
    * it hands the client out, exactly as `pg-pool` assigns it - it is the same
    * function the connect callback receives as its third argument. Absent on a
@@ -77,7 +77,7 @@ export class PgClient extends EventEmitter {
   protected readonly _connection: Connection;
   protected readonly _ownsConnection: boolean;
   protected _connected: boolean;
-  /**
+  /*
    * The tail of the per-client statement queue - see `_serialize`.
    */
   protected _tail: Promise<unknown>;
@@ -85,7 +85,7 @@ export class PgClient extends EventEmitter {
   protected _onNotice?: (msg: any) => void;
   protected _onNotification?: (msg: any) => void;
 
-  /**
+  /*
    * Wraps a connection the pool already owns. Not part of the `pg` surface -
    * `Pool.connect()` is how a consumer gets one of these.
    *
@@ -231,7 +231,7 @@ export class PgClient extends EventEmitter {
     this._onNotification = undefined;
   }
 
-  /**
+  /*
    * Runs statements on this client one at a time, which is what `pg` does.
    *
    * `pg`'s `Client` pushes every `query()` onto an internal queue and starts
@@ -249,10 +249,12 @@ export class PgClient extends EventEmitter {
    * ```
    *
    * Nobody migrating from `pg` loses the 10x by serialising, because `pg`
-   * never offered it - it serialises, and deprecates concurrent `query()`
-   * outright ("will be removed in pg@9.0"). Anyone who wants PostgreJS's
-   * concurrency has `client.connection`, which is the real thing and is not
-   * queued.
+   * never offered it: every `query()` goes on a per-client queue and the next
+   * starts only when the previous has settled. pg@9.0 removes the last public
+   * view of that queue - `Client.activeQuery` and `Client.queryQueue`, both
+   * behind a deprecation notice in `lib/client.js` - not the queue itself, so
+   * the serialising is what stays. Anyone who wants PostgreJS's concurrency
+   * has `client.connection`, which is the real thing and is not queued.
    *
    * Streams are deliberately not queued: a cursor is read lazily and holding
    * the queue open for its lifetime would deadlock every statement behind it.

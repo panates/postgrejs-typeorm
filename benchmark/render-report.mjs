@@ -1,0 +1,451 @@
+/**
+ * Reads `results/latest.json` and writes `doc/BENCHMARKS.md`. It runs
+ * nothing.
+ *
+ * That separation is the point: a measurement takes tens of minutes and
+ * the wording gets iterated a dozen times, so the two must not be the same
+ * command. Re-run this against a measurement taken hours ago as often as
+ * the prose needs it.
+ */
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const r = JSON.parse(
+  readFileSync(join(HERE, 'results', 'latest.json'), 'utf8'),
+);
+const rows = Object.values(r.scenarios);
+
+const ms = v => `${v.toFixed(3)} ms`;
+/** Always with its unit and always per call - a bare total misleads. */
+const kb = v =>
+  v >= 1024 ? `${(v / 1024).toFixed(1)} MB` : `${Math.round(v)} KB`;
+const speedup = v => `${(1 / v).toFixed(2)}x`;
+/**
+ * Capped, because an exponent past 18 is precision the instrument does not
+ * have: it is the odds of a coin landing that way, not of the difference
+ * being that size, and the machine underneath is shared.
+ */
+const odds = p =>
+  p > 0.05
+    ? 'not significant'
+    : `< 1 in 10^${Math.min(18, Math.max(1, Math.floor(-Math.log10(p))))}`;
+const pct = v => `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`;
+
+const memRatio = s =>
+  s.memory
+    ? s.memory[r.driver].allocPerCallKb / s.memory[r.control].allocPerCallKb
+    : undefined;
+
+const bold = (text, yes) => (yes ? `**${text}**` : text);
+
+function table(list) {
+  const head = [
+    `| Scenario | \`${r.control}\`<br>allocated per call | \`${r.driver}\`<br>allocated per call | |`,
+    '| --- | --- | --- | --- |',
+  ];
+  const body = list.map(s => {
+    const a = s.memory?.[r.control].allocPerCallKb;
+    const b = s.memory?.[r.driver].allocPerCallKb;
+    const mr = memRatio(s);
+    const faster = s.ratio < 1;
+    /* **Level is the sign test's answer, not a threshold on the median.**
+     * Each scenario's memory is measured in pairs now, one child per client
+     * with the order swapped, and `uuid of 5k rows` is why: a single
+     * measurement had it 3% worse and the pairs have it winning every one.
+     * A 3% band would have printed the first of those as a result. */
+    const memLevel = s.memory?.heapSign ? s.memory.heapSign.p > 0.05 : false;
+    const lessMem = mr !== undefined && !memLevel && mr < 1;
+    const moreMem = mr !== undefined && !memLevel && mr > 1;
+    const memCell =
+      mr === undefined
+        ? ''
+        : `<br>${bold(pct(mr - 1), lessMem)}${memLevel ? ' level' : ''}`;
+    return (
+      `| ${s.name} - ${s.note} ` +
+      `| ${bold(ms(s.msControl), !faster)}${a === undefined ? '' : `<br>${bold(`${kb(a)}/call`, !lessMem && !moreMem ? false : !lessMem)}`} ` +
+      `| ${bold(ms(s.msDriver), faster)}${b === undefined ? '' : `<br>${bold(`${kb(b)}/call`, lessMem)}`} ` +
+      `| ${bold(speedup(s.ratio), s.verdict !== 'level')}${s.verdict === 'level' ? ' level' : ''}${memCell} |`
+    );
+  });
+  return [...head, ...body].join('\n');
+}
+
+const pick = (group, level) =>
+  rows.filter(s => s.group === group && s.level === level);
+
+const rowCount = list => `${list.length} row${list.length === 1 ? '' : 's'}`;
+
+/**
+ * **Whether the two levels agree, computed rather than asserted.**
+ *
+ * Each ORM scenario names the raw shape it is the other half of
+ * (`mirrors`). A pair agrees when the speedup and the allocation ratio are
+ * both within the band below. The band is wide on purpose: this is asking
+ * "does the raw row tell a reader anything the ORM row did not", not
+ * whether two measurements are equal.
+ */
+const AGREE_BAND = 0.15;
+
+const agreement = (() => {
+  const pairs = [];
+  for (const s of rows) {
+    if (!s.mirrors) continue;
+    const twin = rows.find(t => t.name === s.mirrors);
+    if (!twin) continue;
+    const dSpeed = Math.abs(1 / s.ratio - 1 / twin.ratio);
+    const a = memRatio(s);
+    const b = memRatio(twin);
+    const dMem = a !== undefined && b !== undefined ? Math.abs(a - b) : 0;
+    pairs.push({ s, twin, agrees: dSpeed <= AGREE_BAND && dMem <= AGREE_BAND });
+  }
+  const off = pairs.filter(p => !p.agrees);
+  const say = p =>
+    `- **${p.s.name}** is ${speedup(p.s.ratio)} through TypeORM and ` +
+    `${speedup(p.twin.ratio)} as \`${p.twin.name}\` without it` +
+    (memRatio(p.s) !== undefined && memRatio(p.twin) !== undefined
+      ? `, on ${pct(memRatio(p.s) - 1)} against ${pct(memRatio(p.twin) - 1)} allocated`
+      : '') +
+    '.';
+  return {
+    total: pairs.length,
+    agree: pairs.length - off.length,
+    lines: off.length
+      ? off.map(say).join('\n')
+      : '- Nothing disagreed in this run, which is itself worth recording.',
+  };
+})();
+
+/**
+ * The rows that win on **both** columns, which is what "large payload"
+ * means here. Selecting on the clock alone pulls in the spread half of the
+ * float8 pair, which the next paragraph then calls close on memory - two
+ * sentences each correct about their own column and contradicting each
+ * other together.
+ */
+const payloadWins = list =>
+  [...list]
+    .filter(
+      s =>
+        s.ratio < 0.7 &&
+        memRatio(s) !== undefined &&
+        memRatio(s) < 0.5 &&
+        s.memory?.heapSign?.p <= 0.05,
+    )
+    .sort((a, b) => a.ratio - b.ratio);
+
+/**
+ * A held figure below the baseline is not a negative quantity - it is a
+ * process that ended holding less than it started with, because the
+ * collector reached something the baseline had counted. Print what that
+ * means rather than a minus sign.
+ */
+const heldCell = v => (v < 32 ? '≈0' : kb(v));
+
+/**
+ * The prose is grouped by what a column says, not by the clock. A
+ * paragraph that picks its examples on the time ratio will list a row the
+ * next paragraph calls level on memory, and both sentences are correct
+ * about their own column while contradicting each other together.
+ */
+const payloads = payloadWins(rows.filter(s => s.group !== 'Control'));
+const clockWins = payloads
+  .map(s => `**${s.name}** ${speedup(s.ratio)}`)
+  .join(', ');
+const memWins = [...payloads]
+  .sort((a, b) => memRatio(a) - memRatio(b))
+  .map(
+    s =>
+      `**${s.name}** ${kb(s.memory[r.driver].allocPerCallKb)}/call against ${kb(s.memory[r.control].allocPerCallKb)}`,
+  )
+  .join(', ');
+const memLosses = rows
+  .filter(s => s.memory && memRatio(s) > 1 && s.memory.heapSign?.p <= 0.05)
+  .sort((a, b) => memRatio(b) - memRatio(a))
+  .map(
+    s =>
+      `**${s.name}** ${kb(s.memory[r.driver].allocPerCallKb)} against ${kb(s.memory[r.control].allocPerCallKb)}`,
+  )
+  .join(', ');
+
+const ormBlob = rows.find(s => s.name === 'findOne with a 4 MB bytea');
+const spread = rows.find(s => s.name === 'float8 spread over rows');
+const packed = rows.find(s => s.name === 'float8 packed in one row');
+
+const heldRows = rows
+  .filter(s => s.held)
+  .map(s => {
+    const h = s.held[r.driver];
+    const c = s.held[r.control];
+    const drop = h.idleHeldKb < h.heldKb * 0.8;
+    return `| ${s.name} | ${heldCell(c.heldKb)} | ${heldCell(h.heldKb)}${drop ? ` → ${heldCell(h.idleHeldKb)} idle` : ''} |`;
+  })
+  .join('\n');
+
+const doc = `# The same TypeORM calls, on both clients
+
+Generated from \`benchmark/results/latest.json\` by \`benchmark/render-report.mjs\`. Re-measure with
+\`node benchmark/bench.mjs\`; nothing here is written by hand.
+
+Node ${r.node}, \`postgrejs\` ${r.versions.postgrejs}, \`pg\` ${r.versions.pg}, \`typeorm\` ${r.versions.typeorm},
+PostgreSQL ${r.versions.postgresql} on loopback. Prepared statements: ${r.prepare}.${
+  r.versions.postgrejsSource && !r.versions.postgrejsSource.startsWith('npm')
+    ? `\n\n> **The PostgreJS measured here is not a published build** - it is ${r.versions.postgrejsSource}.\n> This package is developed against the build in the next directory, because PostgreJS releases\n> before it does and an unreleased fix is a scheduling detail, so these figures lead the registry\n> rather than describing it. Installing ${r.versions.postgrejs} will not reproduce them.\n> Re-measure before release.`
+    : ''
+}
+PostgreJS's \`asyncErrorHandling\` is **${r.asyncErrorHandling === false ? 'off' : 'on'}** here: it
+captures a caller-preserving async stack on every call and \`pg\` has nothing equivalent, so
+leaving it on would charge one client for a feature the comparison does not cover. Measured, it is
+worth less than this harness's estimator can resolve - it is off to be like-for-like, not to move a
+row.
+
+## Method
+
+Both clients run in one process and alternate on every pair, so neither gets a warmer machine. Each
+figure is the median of 41 to 401 pairs. Memory is a separate pass: one child process per client,
+one scenario each, \`--expose-gc\`, because a baseline taken with both clients alive has their pools
+and buffers *under* it rather than in it.
+
+Allocation is measured in pairs too - ${r.heapPairs ?? ''} per scenario, one child per client with the order swapped -
+and a row reads *level* when the sign test says so rather than when the medians happen to be close.
+It is the total a batch asks for, counted as every fall in \`heapUsed + external\` plus what
+the heap still holds at the end. Not a per-call peak - that is not measurable, and the worker's
+header says why in full. \`external\` is in it because a \`Buffer\` is external and this is an
+argument about bytes off a socket.
+
+Every scenario binds at least one parameter. \`pg\` sends a statement with no values over
+PostgreSQL's *simple* protocol and takes the extended one as soon as a parameter appears, which is
+what PostgreJS always speaks; without one the two are not running the same protocol.
+
+**And every one runs on a checked-out connection**, which is the path TypeORM takes: a
+\`QueryRunner\` calls \`pool.connect()\` once and sends every statement of its life down that one
+connection - \`pool.query()\` appears nowhere in its PostgreSQL driver. These scenarios used the
+pool anyway until it was measured: each checkout builds a client wrapper, a release closure and two
+events, and on a \`point read\` that is 25.0 KB a call against 17.4 on a held connection. Charging a
+reader for a path their ORM never takes is the same mistake as weighting the server, one layer up.
+The exception is \`concurrent reads\`, which keeps the pool because twenty concurrent reads in
+TypeORM *are* twenty QueryRunners, and so twenty checkouts.
+
+**Every scenario is one the client dominates**, and that is a selection rule rather than a
+coincidence. A shape where PostgreSQL does most of the work measures PostgreSQL: its ratio is set
+by how much scanning or writing the author asked for, and a reader takes it for a property of the
+workload. There was a deliberately server-dominated row here as a control; it was removed, because
+swept across scan sizes its speedup read 1.04x, 0.95x, 1.00x and 0.94x - it was not doing that job
+either. The sign test is the guard instead.
+
+**And every one carries enough payload that the fixed cost is not the answer.**
+\`concurrent reads\` read one row per request until it was swept: at one row the facade allocated
+57% more per call, at twenty rows 2% more, at a hundred rows 30% less. Nothing about either client
+changed across those three - the row had been reporting the cost of checking a connection out,
+twenty times, under the word "concurrent". It asks for a hundred rows each now, which is also
+nearer what a request does.
+
+Those three rules are one rule from three sides: a scenario has to put the thing being compared in
+the majority of what it measures. A row that does not is not neutral - it answers a question
+nobody asked, under a name that promises otherwise.
+
+## Results
+
+Every scenario is either a read or a write, and each is measured twice - on a bare connection, and
+through a TypeORM repository:
+
+| | without the ORM | through TypeORM |
+| --- | --- | --- |
+| reading | ${rowCount(pick('Read', 'raw'))} | ${rowCount(pick('Read', 'orm'))} |
+| writing | ${rowCount(pick('Write', 'raw'))} | ${rowCount(pick('Write', 'orm'))} |
+
+**What is printed is what a reader of this package gets**, which is TypeORM with hydration on top.
+
+Every shape is *also* measured one layer down, on a bare connection where the difference is the
+client and nothing else. Those rows are not printed, because they turned out to restate the answer:
+${agreement.agree} of the ${agreement.total} pairs say the same thing at both levels, within
+${AGREE_BAND}x on the clock and ${Math.round(AGREE_BAND * 100)} points on allocation. Printing them
+doubled the table to repeat it.
+
+They are still run and still in \`results/latest.json\`, because the comparison is what says
+whether a gain is the client's or the layer above it - and because it occasionally disagrees:
+
+${agreement.lines}
+
+### Through TypeORM, reading
+
+${table(pick('Read', 'orm'))}
+
+### Through TypeORM, writing
+
+${table(pick('Write', 'orm'))}
+
+## Reading them
+
+**Large payloads are where it wins, and it wins them twice.** ${clockWins} on the clock; on
+allocation, ${memWins}. Those columns arrive in PostgreSQL's binary format rather than as text to be
+parsed, and the parse is most of what that saves - \`pg\` has to materialise the whole value as a
+string first.
+
+**What decides it is values per row, not values.** \`${spread.name}\` and \`${packed.name}\` hold the
+same 5000 \`float8\`s and differ in nothing but shape. Spread over rows the two are close, ${speedup(spread.ratio)} on the
+clock and ${pct(memRatio(spread) - 1)} on allocation, because the protocol's per-row cost is most of what either client
+pays. Packed into one row it is ${speedup(packed.ratio)} and ${pct(memRatio(packed) - 1)} - and \`pg\` gets worse rather than this
+client getting better, because one row of 5000 values is one long array literal with a substring cut
+per element.
+
+**Entity hydration dilutes the ordinary gain and not the payload one**, which is the reason both
+levels are here. \`findOne\` on a row holding 4 MB reads ${ms(ormBlob.msDriver)} against ${ms(ormBlob.msControl)} and ${kb(ormBlob.memory[r.driver].allocPerCallKb)}
+against ${kb(ormBlob.memory[r.control].allocPerCallKb)} - within a few percent of the same read through \`query()\`, because what TypeORM
+adds is per entity and the payload is one. On a shape of many small entities it is the layer above
+that decides the ratio.
+
+**It allocates more per call on small ones**: ${memLosses}. A higher fixed cost per call and a much
+lower marginal cost per byte is the shape of it, and that first part is charged **per statement**
+rather than per byte - which is worth knowing before reading a percentage off that list. Swept
+across insert
+shapes, the **gap** moves between about 4 and 8 KB a statement while the **percentage** moves by a
+factor of nine:
+
+\`\`\`
+                                  pg      here      gap
+  1 parameter                   8.1      13.4      5.3      +66%
+  1 parameter, returning id    10.5      14.4      3.9      +37%
+  5 parameters                 10.2      14.6      4.4      +43%
+  5 parameters, returning *    17.3      19.9      2.6      +15%
+  10 rows of 5                 23.8      30.4      6.6      +28%
+\`\`\`
+
+Nothing about either client changes across those five; the denominator does. A row that asks for
+one small statement is near the top of that range by construction. **Returning anything at all is
+what moves it most**, because until the statement gives the decoder work the comparison excludes
+the only thing this package is faster at - which is why the write scenarios here carry a row of
+mixed columns and read the key back, the way TypeORM's own insert does.
+
+Most of the gap is not this package. The same one-parameter statement, one client per process,
+medians of three: \`pg\` 8.4 KB a call, PostgreJS with nothing on it 12.9, this facade 14.2 - so
+about 4.5 KB is the client underneath and 1.4 KB is what the facade adds. The larger share is
+reported upstream rather than worked around here, which is this package's rule for anything that
+belongs to the client, and \`flexy-buffer@1.1.2\` in PostgreJS 3.12.2 is the first instalment
+coming back: it took two \`setTimeout\`s a query out of the send buffer.
+
+## Where it comes from
+
+The driver against *itself* with one thing turned off, so what the tables above show can be
+attributed rather than guessed at. Same alternation, same sign test.
+
+| mechanism | without | with | |
+| --- | --- | --- | --- |
+${Object.values(r.mechanisms ?? {})
+  .map(
+    m =>
+      `| ${m.name} - ${m.note} | ${ms(m.msWithout)} | **${ms(m.msWith)}** | **${speedup(m.ratio)}**<br>${m.sign.wins}/${m.sign.pairs} |`,
+  )
+  .join('\n')}
+
+The wire format is the other one, and it is not isolated by turning something off - it is the
+float8 pair above. That pair is why this section can say anything at all: measured only on
+many-rows-few-values shapes the format's contribution came out 4% faster in one run and 7% slower in
+another, neither significant, and the honest report was that it could not be claimed. The pair
+answers it by holding the values constant and changing only the shape.
+
+## Held between calls
+
+What each client keeps at rest, warm. PostgreJS writes each message into one growing buffer per
+connection and hands it back after five seconds of quiet, so a client that has just sent a large
+parameter is still holding what it grew to. That is true while the calls keep coming and gone
+shortly after they stop; one figure cannot say both, so both are here.
+
+| Scenario | \`${r.control}\` | \`${r.driver}\` |
+| --- | --- | --- |
+${heldRows}
+`;
+
+const out = join(HERE, '..', 'doc', 'BENCHMARKS.md');
+writeFileSync(out, doc);
+process.stderr.write(`wrote ${out}\n`);
+
+/**
+ * Rewrites one `<!-- bench:name -->` … `<!-- /bench:name -->` region of the
+ * README, so the numbers a reader meets first are generated rather than
+ * hand-copied. They were hand-copied once and every one of them was two
+ * releases out of date by the time anybody looked.
+ *
+ * Missing markers are an error rather than a no-op: silently rendering
+ * nothing is how a document keeps last quarter's figures.
+ */
+function replaceRegion(text, name, body) {
+  const open = `<!-- bench:${name} -->`;
+  const close = `<!-- /bench:${name} -->`;
+  const from = text.indexOf(open);
+  const to = text.indexOf(close);
+  if (from === -1 || to === -1)
+    throw new Error(`README.md has no ${open} … ${close} region`);
+  return `${text.slice(0, from + open.length)}\n\n${body}\n\n${text.slice(to)}`;
+}
+
+const headline = [
+  'findOneBy',
+  'find 100 entities',
+  'find 5000 entities',
+  'queryBuilder, 500 entities',
+  'save one entity',
+  'point read',
+  'page of 100',
+  'insert one row',
+  'bytea of 4 MB',
+  'int4[] of 100k',
+]
+  .map(n => rows.find(s => s.name === n))
+  .filter(Boolean);
+
+/**
+ * The PostgreJS version as a reader should see it. A hand-placed build is
+ * said so wherever the version appears, not only in the methodology note:
+ * the number in `package.json` is the release before the commits being
+ * measured, so printing it bare sends a reader to a registry build that
+ * does not produce these figures.
+ */
+const pgjs =
+  r.versions.postgrejsSource && !r.versions.postgrejsSource.startsWith('npm')
+    ? `${r.versions.postgrejs}+unreleased`
+    : r.versions.postgrejs;
+
+const env = `TypeORM ${r.versions.typeorm}, \`pg\` ${r.versions.pg}, PostgreJS ${pgjs}, PostgreSQL ${r.versions.postgresql}, loopback, Node ${r.node.replace('v', '')}. Medians per call, and allocation per call. How that was measured and how far each row can be trusted are in [How the numbers were measured](#how-the-numbers-were-measured); the full set is in [\`doc/BENCHMARKS.md\`](doc/BENCHMARKS.md).`;
+
+const big = payloads[0];
+const bytea = rows.find(s => s.name === 'bytea of 4 MB');
+const arr = rows.find(s => s.name === 'int4[] of 100k');
+const point = rows.find(s => s.name === 'point read');
+
+const signRows = rows
+  .filter(s => s.sign)
+  .map(
+    s => `| ${s.name} | ${s.sign.pairs} | ${s.sign.wins} | ${odds(s.sign.p)} |`,
+  )
+  .join('\n');
+
+const README = join(HERE, '..', 'README.md');
+let readme = readFileSync(README, 'utf8');
+readme = replaceRegion(
+  readme,
+  'intro',
+  `It is faster where it counts and holds far less memory doing it. A 4 MB \`bytea\` comes back in
+${ms(bytea.msDriver)} against ${ms(bytea.msControl)}, and at ${kb(bytea.memory[r.driver].allocPerCallKb)} a call against ${kb(bytea.memory[r.control].allocPerCallKb)} - \`pg\` reads that column as
+hex text, twice the size, off the JS heap where a heap figure alone cannot see it. A
+100 000-element \`int4[]\` runs ${speedup(arr.ratio)}, at ${kb(arr.memory[r.driver].allocPerCallKb)} against ${kb(arr.memory[r.control].allocPerCallKb)}. Ordinary queries gain less and gain it
+repeatably: a point read is the faster of the two in ${point.sign.wins} of ${point.sign.pairs} alternated pairs. All of it
+measured through TypeORM against \`pg\` on the same server: [\`doc/BENCHMARKS.md\`](doc/BENCHMARKS.md).`,
+);
+readme = replaceRegion(
+  readme,
+  'payload',
+  `- **Faster where the payload is large** - ${speedup(bytea.ratio)} on a 4 MB \`bytea\` and ${speedup(arr.ratio)} on a
+  100 000-element \`int4[]\`, on a fraction of the memory, because the values arrive in
+  PostgreSQL's binary format rather than as text to be parsed.`,
+);
+readme = replaceRegion(readme, 'headline', `${table(headline)}\n\n${env}`);
+readme = replaceRegion(
+  readme,
+  'signtest',
+  `| workload | pairs | \`${r.driver}\` faster in | odds of that by luck |\n| --- | --- | --- | --- |\n${signRows}`,
+);
+writeFileSync(README, readme);
+process.stderr.write(`wrote ${README}\n`);
+void big;

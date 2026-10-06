@@ -35,7 +35,7 @@ export class PgPool extends EventEmitter {
   protected readonly _pool: PgjsPool;
   protected readonly _facadeOptions: ResolvedFacadeOptions;
   protected readonly _queryOptions: QueryOptions;
-  /**
+  /*
    * Backend pids currently checked out, which is how a pool error that a
    * caller already has is told from one nobody has - see
    * `suppressRedundantPoolError`.

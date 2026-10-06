@@ -199,7 +199,14 @@ fi
   die "no compiled tests; re-run without SKIP_BUILD"
 
 say "Building this facade"
-(cd "$REPO_DIR" && npm run build >/dev/null) || die "build failed"
+# `rman build`, not `npm run build`: the build script moved into
+# @panates/rman-preset and this repository no longer has one. The same line
+# in ../postgrejs-drizzle went on calling `npm run build` after its own
+# migration and the suite exited before its first test with "Missing script",
+# which nothing noticed because nothing ran it on a schedule. This one runs
+# weekly, so it would have been found - but the fix belongs in the same commit
+# as the cause.
+(cd "$REPO_DIR" && npx rman build >/dev/null) || die "build failed"
 
 # The facade is loaded from where it was built, not copied into the
 # checkout's node_modules. It imports nothing from TypeORM - it is a `pg`
@@ -269,7 +276,13 @@ say "Running ${#FILES[@]} files, each twice, on a freshly reset database"
 run_one() {
   local label="$1" file="$2" index="$3" driver="${4:-}"
   node "$WORK_DIR/reset-db.cjs" "$SRC_DIR" >/dev/null 2>&1
+  # The facade patches TypeORM's boolean conversion on import, by resolving
+  # `typeorm` from its own location. That finds this repo's node_modules copy,
+  # not the checkout the tests actually run, so it has to be named - without
+  # this the patch silently does nothing and the failures look like the
+  # facade's.
   (cd "$SRC_DIR" && TYPEORM_PG_DRIVER="$driver" \
+    TYPEORM_POSTGREJS_TYPEORM="$SRC_DIR/build/compiled/src/driver/postgres/PostgresDriver.js" \
     node_modules/.bin/mocha --config "$WORK_DIR/mocharc.json" \
     --reporter json --timeout 30000 --exit \
     --file build/compiled/test/utils/test-setup.js "$file" \

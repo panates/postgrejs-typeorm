@@ -1,4 +1,4 @@
-/**
+/*
  * `pg`'s own parameter rendering, reimplemented.
  *
  * Ported from `pg@8.23.0`'s `lib/utils.js` - `prepareValue`, `arrayString`,
@@ -19,7 +19,7 @@ function escapeElement(elementRepresentation: string): string {
   return '"' + escaped + '"';
 }
 
-/**
+/*
  * A JS array as a PostgreSQL array literal. Comma-separated, so it is wrong
  * for types whose array separator is not a comma (`box`) - which is `pg`'s
  * own documented limitation and is reproduced here deliberately.
