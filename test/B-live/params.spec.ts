@@ -191,6 +191,84 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
     }
   });
 
+  /**
+   * **The surface `src/params.ts` is built on, pinned against a live
+   * server.**
+   *
+   * The policy renders exactly the values PostgreJS would declare a type
+   * for and hands over the rest. That list is a fact about PostgreJS, not
+   * a preference, so it is asserted rather than described: each value goes
+   * through `select $1 as x` and the result column's OID says whether the
+   * parameter was declared.
+   *
+   * **The hazardous direction is PostgreJS beginning to declare something
+   * it currently leaves untyped.** A value would then be handed over, come
+   * back a different type than `pg` gives, and nothing else here would
+   * notice - the matrix above runs the shapes an ORM writes, where context
+   * decides the type and both clients agree. This test is what fails
+   * first.
+   *
+   * The other direction - one of the four becoming unspecified upstream -
+   * fails here too, and costs nothing until it is acted on: a value that
+   * is still rendered is still exactly what `pg` sends.
+   */
+  it('pins which values PostgreJS declares a type for', async () => {
+    const native = facadePool({ postgrejs: { inferParameterTypes: true } });
+    try {
+      // 25 is text: no type declared, which is what `pg` always sends.
+      const HANDED_OVER = {
+        string: ['abc', 25],
+        Date: [new Date('2026-03-04T05:06:07Z'), 25],
+        'array of numbers': [[1, 2, 3], 25],
+        'array of strings': [['a', 'b'], 25],
+        null: [null, 25],
+      } as const;
+      const DECLARED = {
+        'number, integer': [7, 23],
+        'number, non-integer': [1.5, 1700],
+        boolean: [true, 16],
+        'array of booleans': [[true, false], 1000],
+        'plain object': [{ a: 1 }, 114],
+        // The one that was already diverging and nothing was asking:
+        // handed over, PostgreJS declares `bytea` where `pg` declares
+        // nothing, so `select $1` differs. Bound at OID 0 now.
+        Buffer: [Buffer.from([1, 2, 3]), 17],
+      } as const;
+
+      for (const [label, [value, oid]] of Object.entries(HANDED_OVER)) {
+        const r = await native.query('select $1 as x', [value as any]);
+        assert.strictEqual(
+          r.fields[0].dataTypeID,
+          oid,
+          `${label}: PostgreJS no longer leaves this untyped - src/params.ts hands it over`,
+        );
+      }
+      for (const [label, [value, oid]] of Object.entries(DECLARED)) {
+        const r = await native.query('select $1 as x', [value as any]);
+        assert.strictEqual(
+          r.fields[0].dataTypeID,
+          oid,
+          `${label}: PostgreJS declares this differently now`,
+        );
+      }
+
+      // And the default path answers pg's own type for every one of them.
+      for (const [value] of [
+        ...Object.values(HANDED_OVER),
+        ...Object.values(DECLARED),
+      ]) {
+        const ours = await facade.query('select $1 as x', [value as any]);
+        const theirs = await control.query('select $1 as x', [value as any]);
+        assert.strictEqual(
+          ours.fields[0].dataTypeID,
+          theirs.fields[0].dataTypeID,
+        );
+      }
+    } finally {
+      await native.end();
+    }
+  });
+
   it('sends an array PostgreSQL indexes from 1', async () => {
     // Not a pg comparison: an assertion about the value the server stored,
     // because an off-by-one lower bound is invisible to a round trip through

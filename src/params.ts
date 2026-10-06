@@ -4,108 +4,105 @@ import { UNSPECIFIED_OID } from './constants.js';
 import { prepareValue } from './prepare-value.js';
 
 /**
- * Parameters, the way `pg` sends them: every value rendered to text (or left
- * a `Buffer`) and declared OID 0, so PostgreSQL resolves each one from where
- * its placeholder appears.
+ * Parameters: `pg`'s own rendering for the values PostgreJS would declare a
+ * type for, and PostgreJS's own path for the rest - which it already sends
+ * untyped, exactly as `pg` does.
  *
- * This is the whole policy, and it is deliberately not "wrap scalars in
- * `BindParam(0, v)` and leave the rest to PostgreJS's typed encoders", which
- * is what `postgrejs-kysely` and `postgrejs-drizzle` do. Measured over 28
- * query shapes against `pg` (`doc/DRIVER-DESIGN.md` §5):
+ * ## Why not simply hand them all over
  *
- * | policy | score |
- * | --- | --- |
- * | leave everything to PostgreJS | 27/28 |
- * | `BindParam(0, v)` for scalars only | 27/28 |
- * | **this one** | **28/28** |
- *
- * The one PostgreJS missed was an empty array, and an all-null array with it:
- * `determine()` picked an array's type from `value[0]`, which is `undefined`
- * for `[]` and `null` for `[null]`, so neither was typed and the server
- * answered `22P02 malformed array literal: ""`.
- *
- * **Both are fixed upstream** - re-measured against the `node_modules` build
- * on 2026-10-05, `[]`, `[null]` and `[null, 2]` all round-trip through
- * PostgreJS's own typing, with and without a cast, and agree with `pg`. So
- * the score is no longer what holds this policy in place.
- *
- * **Reversing it was tried on 2026-10-06 and TypeORM's own suite said no.**
- * Letting PostgreJS type every parameter took that suite from 806/806 to
- * **739/806**; the same checkout with this policy restored is 806/806, so
- * the sixty-seven are the policy and nothing else. The mechanism is not the
- * three shapes below: a declared parameter changes the type of **any result
- * column derived from a parameter**, because the server then knows what the
- * expression is. `select $1 as x` with `7` is `text` and `'7'` under `pg`
- * and `int4` and `7` declared - and TypeORM selects parameters constantly,
- * in subqueries, in the distinct query behind skip/take, in
- * insert-from-select. `test/B-live/params.spec.ts` pins that.
- *
- * The lesson is about the instrument as much as the policy. The live matrix
- * agreed on everything but three shapes and the differential suite was
- * untouched; both were measuring a bare `select $1` and neither was
- * measuring a parameter inside a query TypeORM builds. **Anything not
- * asserted is not known.**
- *
- * **What also holds it is three values a caller reads.** `money` from a
- * non-integer used to be the last live case and it is closed upstream
- * (`341f343`: a finite non-integer is declared `numeric`, not `float8`, and
- * `numeric -> money` is an assignment cast where `float8 -> money` has no
- * `pg_cast` row at all). With that in, handing every parameter to PostgreJS
- * scores 42/42 on the matrix as it then stood - and the matrix was wrong.
- * It compared `String(v)`, under which `12` and `'12'` are one answer:
+ * Because a declared type is not only about whether the parameter resolves.
+ * **It also sets the type of any result column derived from that
+ * parameter**, and TypeORM selects parameters constantly: in subqueries, in
+ * the distinct query behind skip/take, in insert-from-select.
  *
  * ```
- *   select $1      12      pg '12' (string)    declared 12 (number)
- *   select $1      true    pg 'true' (string)  declared true (boolean)
- *   select $1 * 2  1.5     pg 22P02            declared '3.0'
+ *   select $1 as x   with 7    pg  text / '7'    declared  int4 / 7
  * ```
  *
- * All three are correct values and a facade still cannot ship them - a
- * caller moving off `pg` would find a string had become a number. They are
- * in `test/B-live/params.spec.ts` now, compared with their types on.
+ * Letting every value through took TypeORM's own functional suite from
+ * 806/806 to **739/806**. Bisected, those sixty-seven are **`number` on its
+ * own**: handing numbers over reproduces all of them, and handing over
+ * booleans, boolean arrays and plain objects costs none. So the list below
+ * is measured rather than reasoned, and `number` is the expensive entry.
  *
- * So the policy stays, and what is left of the old argument stays with it:
- * reusing `pg`'s own rendering means this cannot drift from it type by type
- * as either library gains encoders - a guarantee by construction rather
- * than by a matrix that has to be re-run, which this round is the reason to
- * take seriously.
+ * `inferParameterTypes: true` hands everything over for anyone who wants
+ * PostgreJS's answers - `select $1 * 2` works there and raises `22P02`
+ * under `pg` - and the cost of that is the sixty-seven, which is why it is
+ * not the default.
  *
- * **It is paid for, and the bill is on arrays.** One parameter holding
- * 100 000 `int4`s, allocation per call: PostgreJS on its own 1.94 MB, `pg`
- * 27.19 MB, this policy 27.89 MB.
+ * ## Why not render all of them, which is what this file used to do
  *
- * Not because a binary encoding is given up - that was the first reading
- * here and it was wrong. PostgreJS's `isUnspecifiedParam` already sends an
- * array of numbers as unspecified **text**, for the same reason this file
- * does: `[1, 2]` is `int4[]`, `int8[]`, `numeric[]` or `float8[]` depending
- * on where it lands, and those have no implicit casts between them. Counted
- * on the socket for one such call, all three write the same order of bytes
- * - `pg` 1 300 124, PostgreJS 1 100 146, this facade 1 300 047.
+ * Because six of the eleven value kinds are rendered for nothing: PostgreJS
+ * sends a string, a `Date`, an array of numbers, an array of strings and
+ * `null` untyped for the same reasons this file would have, so running
+ * `pg`'s renderer over them produces the same wire bytes the slow way.
  *
- * The fourteen times is in **how the literal is built**: PostgreJS writes it
- * into its own buffer, `prepareValue` concatenates it. Same wire contract,
- * same declared type, same bytes - fourteen times the garbage to produce
- * them. Which is also why lifting the policy for arrays is narrow: it does
- * not change what the server is told, only who assembles the text.
+ * The array is what pays. One parameter holding 100 000 `int4`s: **27.2 MB
+ * a call through `pg`'s renderer, 0.97 MB through PostgreJS's own writer**,
+ * and 17.8 ms against 13.1. Identical bytes on the wire and the same
+ * declared type - nothing - because the saving is in building the literal,
+ * not in what is sent. `write a 100k int4[]` goes from level to 41/41.
  *
- * **Taking that back needs one thing from upstream, and not a change here.**
- * The shape that works is `isUnspecifiedParam(v) ? v : BindParam(0,
- * prepareValue(v))` - hand PostgreJS the value exactly where it would have
- * sent it unspecified anyway, so the wire contract is identical on both
- * branches and the fast lane is reached for the values that have one. That
- * predicate is internal: not on the root export, and `exports` carries only
- * `.` and `./package.json`.
+ * ## What `pg`'s renderer is still for
  *
- * Writing our own copy of it is the one thing this package does not do.
- * `isUnspecifiedParam` has changed its mind three times in one round -
- * empty arrays, all-null arrays, non-integer scalars - and a stale copy
- * would silently begin declaring types where PostgreJS declares none, which
- * is a correctness bug reachable from a dependency bump with no test on
- * either side that would fail. Asked for in
- * `../postgrejs/.claude/export-isunspecifiedparam.md`.
+ * `prepare-value.ts` is a port of `pg`'s own function, held to it by a test
+ * that calls both. It stays, and `inferParameterTypes: false` runs it over
+ * everything for code that wants the old behaviour exactly.
  *
- * See `doc/DRIVER-DESIGN.md` §5 and D1.
+ * **`parseInputDatesAsUTC` only has meaning there.** It is an option of
+ * `pg`'s renderer, and a `Date` no longer reaches it on the default path -
+ * PostgreJS sends one untyped, carrying the process's own offset, which is
+ * what `pg` sends anyway.
  */
+
+/**
+ * **Would PostgreJS declare a type for this value, where `pg` declares
+ * none?** Only those go through `pg`'s renderer; the rest are handed over.
+ *
+ * PostgreJS answers the same question internally (`isUnspecifiedParam`) and
+ * sends strings, `Date`s and arrays of numbers untyped for the same reasons
+ * this file would have. Measured against the build in `node_modules`, one
+ * `select $1 as x` per value, comparing the result column's OID:
+ *
+ * ```
+ *   string       text    text      same
+ *   Date         text    text      same
+ *   number[]     text    text      same
+ *   string[]     text    text      same
+ *   Buffer       bytea   bytea     DECLARED (see below)
+ *   null         text    text      same
+ *   number       text    int4 / numeric   DECLARED
+ *   boolean      text    bool             DECLARED
+ *   boolean[]    text    bool[]           DECLARED
+ *   plain object text    json             DECLARED
+ * ```
+ *
+ * The four matter because **a declared parameter changes the type of a
+ * result column derived from it**, not only whether the parameter resolves.
+ * `select $1 as x` with `7` is `text` and `'7'` under `pg`, `int4` and `7`
+ * declared - and TypeORM selects parameters constantly, in subqueries, in
+ * the distinct query behind skip/take, in insert-from-select. Letting all
+ * of them through took TypeORM's own suite from 806/806 to 739/806;
+ * rendering exactly these four is 806/806 again, which is how the list was
+ * confirmed rather than assumed.
+ *
+ * **This list being stale is a lost optimisation, not a bug - in one
+ * direction.** If PostgreJS starts sending one of the four unspecified, a
+ * value here keeps going through `pg`'s renderer: still exactly what `pg`
+ * sends, just more work than needed. The hazardous direction is the other
+ * one - PostgreJS beginning to declare something it currently leaves
+ * untyped - and `test/B-live/params.spec.ts` pins the whole surface
+ * against a live server so that moving it fails here first.
+ */
+function postgrejsWouldDeclare(v: any): boolean {
+  if (v === null || v === undefined) return false;
+  const t = typeof v;
+  if (t === 'number' || t === 'boolean') return true;
+  if (Array.isArray(v)) return v.some(e => typeof e === 'boolean');
+  if (t !== 'object') return false;
+  return !(v instanceof Date);
+}
+
 export function toBindParams(
   values: readonly any[] | undefined,
   options: ResolvedFacadeOptions,
@@ -125,11 +122,21 @@ export function toBindParams(
   const utc = options.parseInputDatesAsUTC;
   let v: string | Buffer | null;
   for (i = 0; i < l; i++) {
+    if (!postgrejsWouldDeclare(values[i])) {
+      // PostgreJS sends this one unspecified too, so its own path is `pg`'s
+      // answer reached more cheaply. See `postgrejsWouldDeclare`.
+      out[i] = values[i];
+      continue;
+    }
     v = prepareValue(values[i], undefined, utc);
-    // A Buffer goes as bytes. `pg` sends it as a binary parameter and
-    // PostgreJS does the same when it is handed one directly, so there is
-    // nothing to declare.
-    out[i] = Buffer.isBuffer(v) ? v : new BindParam(UNSPECIFIED_OID, v);
+    // A Buffer keeps its bytes - `prepareValue` returns it unchanged - but
+    // it is still bound at OID 0, which is the correction. Handed to
+    // PostgreJS directly it declares `bytea`, where `pg` declares nothing
+    // and lets the server decide: `select $1` on raw bytes is 22021 under
+    // `pg` and a Buffer back without this. Both answer `0102ff` for
+    // `$1::bytea`, which is why it went unnoticed until the surface was
+    // pinned.
+    out[i] = new BindParam(UNSPECIFIED_OID, v);
   }
   return out;
 }
