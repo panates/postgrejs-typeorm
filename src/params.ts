@@ -91,7 +91,16 @@ import { prepareValue } from './prepare-value.js';
  *   plain object text    json             DECLARED
  * ```
  *
- * The four matter because **a declared parameter changes the type of a
+ * **A number is the one that is allowed to be declared**, and it is the
+ * expensive entry. PostgreJS answering `int4`/`numeric` is the right answer
+ * for a value the caller passed as a number: `insert into t (q bigint)
+ * values ($1)` with `2.7` writes `3`, which is what plain SQL does with the
+ * literal, where `pg` sends text and the server's input parser refuses it.
+ * It cost sixty-seven of TypeORM's own tests until the cause was found, and
+ * the cause was TypeORM sending `1` for a boolean column - see
+ * `typeorm-boolean.ts`.
+ *
+ * The rest matter because **a declared parameter changes the type of a
  * result column derived from it**, not only whether the parameter resolves.
  * `select $1 as x` with `7` is `text` and `'7'` under `pg`, `int4` and `7`
  * declared - and TypeORM selects parameters constantly, in subqueries, in
@@ -109,19 +118,14 @@ import { prepareValue } from './prepare-value.js';
  * against a live server so that moving it fails here first.
  */
 function postgrejsWouldDeclare(v: any): boolean {
-  if (v === null || v === undefined) return false;
-  const t = typeof v;
-  // Not `number`. PostgreJS declaring `int4`/`numeric` is the right answer
-  // for a value the caller passed as a number - `insert into t (q bigint)
-  // values ($1)` with 2.7 writes 3, which is what plain SQL does with the
-  // literal, where `pg` sends text and the server's input parser refuses it.
-  // It cost sixty-seven TypeORM tests until the cause was found, and the
-  // cause was TypeORM sending 1 for a boolean column: see
-  // `typeorm-boolean.ts`.
-  if (t === 'boolean') return true;
-  if (Array.isArray(v)) return v.some(e => typeof e === 'boolean');
-  if (t !== 'object') return false;
-  return !(v instanceof Date);
+  // One line per JS type, each saying what PostgreJS does with it. The last
+  // line is **not** a general fallthrough - the test above it has already
+  // returned for everything that is not an object.
+  if (v === null || v === undefined) return false; // untyped, as `pg` sends
+  if (typeof v === 'boolean') return true; // -> `bool`
+  if (Array.isArray(v)) return v.some(e => typeof e === 'boolean'); // -> `bool[]`
+  if (typeof v !== 'object') return false; // a number or a string: see below
+  return !(v instanceof Date); // a plain object -> `json`; a `Date`, untyped
 }
 
 export function toBindParams(
