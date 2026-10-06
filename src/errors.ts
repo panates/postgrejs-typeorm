@@ -1,4 +1,4 @@
-/**
+/*
  * Making a PostgreJS `DatabaseError` read like `pg`'s.
  *
  * Every structured field is already identical - verified across seven error

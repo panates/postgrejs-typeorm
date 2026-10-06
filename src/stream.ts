@@ -14,7 +14,7 @@ export function isSubmittable(value: any): value is Submittable {
   return !!value && typeof value.submit === 'function';
 }
 
-/**
+/*
  * `pg-query-stream` in terms of a PostgreJS `Cursor`.
  *
  * The submittable is the one part of `pg`'s surface that is genuinely

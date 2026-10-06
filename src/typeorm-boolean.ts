@@ -1,4 +1,4 @@
-/**
+/*
  * **TypeORM sends `1` and `0` for a `boolean` column, and this corrects it.**
  *
  * `PostgresDriver.preparePersistentValue` has, for every version in the peer
@@ -45,11 +45,20 @@ const MARK = Symbol.for('typeorm-postgrejs.booleanPatch');
 // `require('typeorm')` would resolve it, from here.
 const require = createRequire(import.meta.url);
 
+/**
+ * Corrects TypeORM's PostgreSQL driver so that a `boolean` column is sent a
+ * boolean, not `1`/`0`. Applied on import; calling it again is a no-op.
+ *
+ * Returns whether the patch is in place - `false` when TypeORM is not
+ * installed, or when `TYPEORM_POSTGREJS_NO_BOOLEAN_PATCH` is set.
+ *
+ * @see the notes above for why this exists and when it can be removed.
+ */
 export function patchTypeormBooleans(): boolean {
   if (process.env.TYPEORM_POSTGREJS_NO_BOOLEAN_PATCH) return false;
   let PostgresDriver: any;
   try {
-    /**
+    /*
      * **It patches the TypeORM it can resolve, which is the one a consumer
      * has.** An application installs TypeORM once and both it and this
      * package resolve the same copy, which is what makes an import-time

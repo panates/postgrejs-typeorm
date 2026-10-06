@@ -7,7 +7,7 @@ import { DataTypeOIDs, type FetchAsStringItem } from 'postgrejs';
  */
 export const UNSPECIFIED_OID = 0;
 
-/**
+/*
  * Range and multirange OIDs. `DataTypeOIDs` does not name all of them and
  * `pg` hands every range back as a string, so they are listed here to be
  * asked for as text.

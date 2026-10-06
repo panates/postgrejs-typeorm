@@ -2,7 +2,7 @@ import { PgClient } from './client.js';
 import { PgPool } from './pool.js';
 import { patchTypeormBooleans } from './typeorm-boolean.js';
 
-/**
+/*
  * Applied on import, deliberately: TypeORM's PostgreSQL driver turns a
  * `boolean` into `1`/`0`, which only works because `pg` declares no type for
  * a parameter. See `typeorm-boolean.ts` for what it costs, what was weighed,

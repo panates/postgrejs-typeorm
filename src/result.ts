@@ -49,7 +49,7 @@ function toPgFields(fields: readonly FieldInfo[]): PgField[] {
   return out;
 }
 
-/**
+/*
  * PostgreJS's `QueryResult` as the object `pg` would have returned.
  *
  * Two things here are load-bearing and neither is obvious:
