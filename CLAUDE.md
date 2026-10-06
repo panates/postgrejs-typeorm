@@ -75,21 +75,19 @@ the only remaining advantage. Do not reopen that without new evidence.
 
 ## Where things are
 
-> **The peer floor is wrong and has to be raised before this ships.** Since 2026-10-06 the
-> parameter policy depends on two commits that are on `dev` and **unreleased**:
->
-> | commit | what the default path needs it for |
-> | --- | --- |
-> | `341f343` | a non-integer scalar declared `numeric`, not `float8` - without it `$1::money` with `12.34` is `42846` |
-> | `a11a9af` | an undeclared parameter written the way `pg` writes one - without it a plain object bound at OID 0 is `[object Object]` |
->
-> The version carrying them is not known yet and is deliberately not guessed at here. When upstream
-> releases, set the floor to it. The table below is the history of the old floor and is accurate for
-> everything except this.
+- **PostgreJS**: `../postgrejs`. Its `CLAUDE.md` describes the internals. Peer is
+  **`>=3.13.0 <4`**, and that floor is exact rather than cautious. **3.13.0** is where the
+  parameter policy's two requirements landed, both found here:
 
-- **PostgreJS**: `../postgrejs`. Its `CLAUDE.md` describes the internals. Peer is **`>=3.10.0 <4`**,
-  and that floor is exact rather than cautious - `src/` uses six things that all landed in 3.10.0
-  and nothing works without them:
+  | what `src/` needs | upstream |
+  | --- | --- |
+  | a non-integer scalar declared `numeric`, not `float8` - without it `$1::money` with `12.34` is `42846` | `341f343` |
+  | an undeclared parameter written the way `pg` writes one - without it a plain object bound at OID 0 is `[object Object]` | `a11a9af` |
+
+  Verified by behaviour rather than by version number before the floor was moved.
+
+  The floor was `>=3.10.0` until 2026-10-06, for six things that landed in 3.10.0 and that `src/`
+  still uses - kept here because the table is the history of what this package has needed:
 
   | what `src/` needs | upstream |
   | --- | --- |
