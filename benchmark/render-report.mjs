@@ -75,6 +75,8 @@ function table(list) {
 const pick = (group, level) =>
   rows.filter(s => s.group === group && s.level === level);
 
+const rowCount = list => `${list.length} row${list.length === 1 ? '' : 's'}`;
+
 /**
  * The rows that win on **both** columns, which is what "large payload"
  * means here. Selecting on the clock alone pulls in the spread half of the
@@ -205,15 +207,32 @@ nobody asked, under a name that promises otherwise.
 
 ## Results
 
-### Reading
+**Two axes, three tables, and the join is worth knowing before reading them.** Every scenario is
+either a read or a write, and runs either on a bare connection or through a TypeORM repository:
+
+| | without the ORM | through TypeORM |
+| --- | --- | --- |
+| reading | ${rowCount(pick('Read', 'raw'))} | ${rowCount(pick('Read', 'orm'))} |
+| writing | ${rowCount(pick('Write', 'raw'))} | ${rowCount(pick('Write', 'orm'))} |
+
+The level is the axis that matters - entity hydration sits on top of everything and dilutes any
+gain, so the same work at both levels is two different answers and neither substitutes for the
+other. The read/write split is a subdivision inside it.
+
+The third table below is **not a third kind of workload**: it is the right-hand column, both rows
+of it, left together because splitting it would leave a table of
+${pick('Write', 'orm').length}. So \`save one entity\` there is a write and belongs beside
+\`insert one row\` above, not opposite it.
+
+### Reading, without the ORM
 
 ${table(pick('Read', 'raw'))}
 
-### Writing
+### Writing, without the ORM
 
 ${table(pick('Write', 'raw'))}
 
-### Through TypeORM
+### Through TypeORM, reading and writing
 
 ${table([...pick('Read', 'orm'), ...pick('Write', 'orm')])}
 

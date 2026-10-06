@@ -583,61 +583,40 @@ export const SCENARIOS = [
   },
   {
     /**
-     * **The floor, and that is its job.** One row, one parameter, nothing
-     * returned: the smallest statement anyone would send, so the per-call
-     * cost is most of what it counts. Every other row here is partly about
-     * payload; this one is about what a statement costs before the payload.
+     * **One row as a row is written**: nine mixed columns from `writeRow`,
+     * and the key read back, because that is the insert TypeORM issues -
+     * `INSERT ... RETURNING "id"` off the wire.
      *
-     * Which is why its percentage must not be read as a fact about writing.
-     * Swept on PostgreJS 3.12.2, per call, `pg` against this facade:
+     * It used to be one short text column with nothing returned, kept as a
+     * deliberate floor. That does not compare the clients: with one
+     * parameter and no result the call is nearly all fixed per-statement
+     * overhead, so the row read +68% while the same insert returning its id
+     * read +37% and returning the row +1% - the percentage measured the
+     * denominator this scenario picked, not anything about writing. A
+     * single-parameter call excludes encoding the values and decoding the
+     * result, which is what the two clients actually do differently.
      *
-     * ```
-     *                                 pg     here     gap
-     *   1 parameter                  8.2     13.8     5.6     +68%
-     *   1 parameter, returning id   10.3     14.1     3.8     +37%
-     *   5 parameters                 9.0     15.4     6.5     +72%
-     *   5 parameters, returning *   17.0     18.4     1.4      +8%
-     *   10 rows of 5                23.2     31.3     8.1     +35%
-     * ```
-     *
-     * The gap moves between about 4 and 8 KB; the percentage moves by a
-     * factor of nine. Nothing about either client changes across those
-     * five - the denominator does, and this scenario picked nearly the
-     * smallest denominator available.
-     *
-     * (A no-parameter variant reads +150%, and is left out of that table
-     * on purpose: with no parameter `pg` sends a simple Query while
-     * PostgreJS still runs Parse/Bind/Describe/Execute/Sync, so the two are
-     * not on the same protocol and the figure means nothing.)
-     *
-     * **And the gap is mostly not this facade's.** The same statement with
-     * one parameter, one client per process, medians of three: `pg` 8.4 KB
-     * a call, PostgreJS with nothing on it 12.9, this facade 14.2. So about
-     * 4.5 KB is the client underneath and 1.4 KB is what the facade adds.
-     * Reported upstream as
-     * `../postgrejs/.claude/a-fixed-cost-per-statement.md` rather than
-     * hidden behind a larger denominator, and `flexy-buffer@1.1.2` in
-     * PostgreJS 3.12.2 is the first part of it coming back - two
-     * `setTimeout`s a query out of the send buffer.
-     *
-     * It keeps no RETURNING, unlike `save one entity`, which TypeORM sends
-     * as `INSERT ... RETURNING "id"`. That is deliberate here: adding one
-     * would move this row from +68% to +37% by giving the decoder something
-     * to do, and a floor that has been softened is not a floor. The ORM
-     * level is where the consumer's actual insert is measured.
+     * The per-statement cost is real and is tracked upstream
+     * (`../postgrejs/.claude/a-fixed-cost-per-statement.md`); it is not
+     * something a benchmark row should stand in for.
      */
     name: 'insert one row',
     group: 'Write',
     level: 'raw',
-    note: '1 row, 1 parameter, nothing returned',
+    note: '1 row of 9 mixed columns, returning the key',
     iters: 50,
     pairs: 401,
     run: (db, i) =>
-      q(db, `insert into ${SCHEMA}.writes (name) values ($1)`, [`n${i}`]),
+      q(
+        db,
+        `insert into ${SCHEMA}.writes (${WRITE_COLUMNS})
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`,
+        writeRow(i),
+      ),
   },
   {
-    /* Nothing else here binds more than two parameters, and rendering them is
-     * a thing this facade does itself: every value goes through `pg`'s own
+    /* The most parameters any row here binds, and rendering them is a thing
+     * this facade does itself: every value goes through `pg`'s own
      * `prepareValue` before it is bound. 2500 of them is where that shows. */
     name: 'insert 500 rows',
     group: 'Write',

@@ -133,10 +133,10 @@ same migrations. What you get for it:
 | find 100 entities - 100 entities of 9 columns | 0.600 ms<br>400 KB/call | **0.515 ms**<br>**314 KB/call** | **1.16x**<br>**-22%** |
 | find 5000 entities - 5000 entities of 9 columns | 8.974 ms<br>15.9 MB/call | **6.082 ms**<br>**11.2 MB/call** | **1.48x**<br>**-30%** |
 | queryBuilder, 500 entities - 500 entities after a where and an order by | 1.186 ms<br>1.7 MB/call | **0.995 ms**<br>**1.0 MB/call** | **1.19x**<br>**-39%** |
-| save one entity - 1 entity of 9 assigned columns, mixed types | 0.701 ms<br>**103 KB/call** | **0.630 ms**<br>122 KB/call | **1.11x**<br>+18% |
+| save one entity - 1 entity of 9 assigned columns, mixed types | 0.727 ms<br>**103 KB/call** | **0.662 ms**<br>121 KB/call | **1.10x**<br>+17% |
 | point read - 1 row of 9 columns | 0.284 ms<br>**17 KB/call** | **0.243 ms**<br>18 KB/call | **1.17x**<br>+4% |
 | page of 100 - 100 rows of 9 columns, mixed types | 0.569 ms<br>235 KB/call | **0.477 ms**<br>**156 KB/call** | **1.19x**<br>**-33%** |
-| insert one row - 1 row, 1 parameter, nothing returned | 0.236 ms<br>**9 KB/call** | **0.197 ms**<br>14 KB/call | **1.19x**<br>+55% |
+| insert one row - 1 row of 9 mixed columns, returning the key | 0.289 ms<br>**17 KB/call** | **0.242 ms**<br>19 KB/call | **1.20x**<br>+11% |
 | bytea of 4 MB - 1 row holding 4 MB | 35.275 ms<br>51.6 MB/call | **15.553 ms**<br>**4.1 MB/call** | **2.27x**<br>**-92%** |
 | int4[] of 100k - 1 row holding 1 array of 100 000 values | 22.621 ms<br>22.7 MB/call | **5.767 ms**<br>**2.2 MB/call** | **3.92x**<br>**-90%** |
 
@@ -172,10 +172,10 @@ than the differences do - so which of the two won each pair is counted separatel
 | bytea of 4 MB | 41 | 41 | < 1 in 10^12 |
 | uuid of 5k rows | 61 | 58 | < 1 in 10^13 |
 | box of 5k rows | 61 | 44 | < 1 in 10^3 |
-| insert one row | 401 | 387 | < 1 in 10^18 |
-| insert 500 rows | 61 | 59 | < 1 in 10^14 |
+| insert one row | 401 | 394 | < 1 in 10^18 |
+| insert 500 rows | 61 | 60 | < 1 in 10^16 |
 | write a 100k int4[] | 41 | 41 | < 1 in 10^12 |
-| twenty inserts in a transaction | 61 | 59 | < 1 in 10^14 |
+| twenty inserts in a transaction | 61 | 60 | < 1 in 10^16 |
 | concurrent reads | 61 | 58 | < 1 in 10^13 |
 | findOneBy | 201 | 200 | < 1 in 10^18 |
 | find 100 entities | 201 | 179 | < 1 in 10^18 |
@@ -183,7 +183,7 @@ than the differences do - so which of the two won each pair is counted separatel
 | queryBuilder, 500 entities | 101 | 94 | < 1 in 10^18 |
 | findOne with a 4 MB bytea | 41 | 41 | < 1 in 10^12 |
 | findOne with a 100k int4[] | 41 | 41 | < 1 in 10^12 |
-| save one entity | 201 | 184 | < 1 in 10^18 |
+| save one entity | 201 | 190 | < 1 in 10^18 |
 
 <!-- /bench:signtest -->
 

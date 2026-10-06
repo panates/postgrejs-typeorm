@@ -634,15 +634,15 @@
       "name": "insert one row",
       "group": "Write",
       "level": "raw",
-      "note": "1 row, 1 parameter, nothing returned",
+      "note": "1 row of 9 mixed columns, returning the key",
       "iters": 50,
-      "msControl": 0.2358025,
-      "msDriver": 0.19740666,
-      "ratio": 0.837169495658443,
+      "msControl": 0.28942416000000004,
+      "msDriver": 0.24213,
+      "ratio": 0.8365922181479251,
       "sign": {
-        "wins": 387,
+        "wins": 394,
         "pairs": 401,
-        "p": 1.01823847007174e-95
+        "p": 1.2372552308114072e-106
       },
       "verdict": "faster",
       "memory": {
@@ -651,30 +651,30 @@
           "scenario": "insert one row",
           "level": "raw",
           "iterations": 1000,
-          "heldKb": 345.9736328125,
-          "allocPerCallKb": 8.8008818359375,
-          "sustainedKb": 8075.828125,
-          "sustainedRssKb": 99024,
-          "wireKb": 0.0361328125,
-          "wireOutKb": 0.104392578125,
+          "heldKb": 437.0283203125,
+          "allocPerCallKb": 16.7664169921875,
+          "sustainedKb": 9102.7763671875,
+          "sustainedRssKb": 102624,
+          "wireKb": 0.0751953125,
+          "wireOutKb": 0.540482421875,
           "tracedPerCallKb": 0,
-          "allocLoKb": 8.690455078125,
-          "allocHiKb": 9.2424482421875
+          "allocLoKb": 16.3470419921875,
+          "allocHiKb": 17.2317841796875
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "insert one row",
           "level": "raw",
           "iterations": 1000,
-          "heldKb": 552.9951171875,
-          "allocPerCallKb": 13.6180732421875,
-          "sustainedKb": 7649.861328125,
-          "sustainedRssKb": 98928,
-          "wireKb": 0.0263671875,
-          "wireOutKb": 0.041892578125,
+          "heldKb": 676.994140625,
+          "allocPerCallKb": 18.62419921875,
+          "sustainedKb": 8150.388671875,
+          "sustainedRssKb": 101184,
+          "wireKb": 0.041015625,
+          "wireOutKb": 0.348099609375,
           "tracedPerCallKb": 0,
-          "allocLoKb": 13.3584658203125,
-          "allocHiKb": 14.13257421875
+          "allocLoKb": 17.969818359375,
+          "allocHiKb": 19.2646484375
         },
         "heapPairs": 7,
         "heapWins": 0,
@@ -683,20 +683,20 @@
           "pairs": 7,
           "p": 0.015625000000000003
         },
-        "sustainedWins": 5
+        "sustainedWins": 7
       },
       "held": {
         "pg": {
           "client": "pg",
           "scenario": "insert one row",
-          "heldKb": 345.9736328125,
-          "idleHeldKb": 347.3359375
+          "heldKb": 436.826171875,
+          "idleHeldKb": 436.84375
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "insert one row",
-          "heldKb": 552.9951171875,
-          "idleHeldKb": 571.53125
+          "heldKb": 677.197265625,
+          "idleHeldKb": 699.25
         }
       }
     },
@@ -706,13 +706,13 @@
       "level": "raw",
       "note": "500 rows of 9 mixed columns in 1 statement, 4500 parameters",
       "iters": 5,
-      "msControl": 6.776375,
-      "msDriver": 5.8821666,
-      "ratio": 0.8680403017837708,
+      "msControl": 6.5916832,
+      "msDriver": 5.7397,
+      "ratio": 0.8707487641396358,
       "sign": {
-        "wins": 59,
+        "wins": 60,
         "pairs": 61,
-        "p": 1.6410484082740218e-15
+        "p": 5.3776427755280416e-17
       },
       "verdict": "faster",
       "memory": {
@@ -722,14 +722,14 @@
           "level": "raw",
           "iterations": 100,
           "heldKb": 458.5615234375,
-          "allocPerCallKb": 2535.74435546875,
-          "sustainedKb": 26281.4130859375,
-          "sustainedRssKb": 137040,
+          "allocPerCallKb": 2534.68541015625,
+          "sustainedKb": 26144.9833984375,
+          "sustainedRssKb": 134496,
           "wireKb": 0.0380859375,
           "wireOutKb": 195.473828125,
           "tracedPerCallKb": 0,
-          "allocLoKb": 2533.686640625,
-          "allocHiKb": 2565.8878515625
+          "allocLoKb": 2534.05234375,
+          "allocHiKb": 2563.6548046875
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
@@ -737,14 +737,14 @@
           "level": "raw",
           "iterations": 100,
           "heldKb": 1061.7705078125,
-          "allocPerCallKb": 1924.965146484375,
-          "sustainedKb": 19242.19921875,
-          "sustainedRssKb": 147488,
+          "allocPerCallKb": 1926.033115234375,
+          "sustainedKb": 19146.57421875,
+          "sustainedRssKb": 147424,
           "wireKb": 0.0283203125,
           "wireOutKb": 159.8087890625,
           "tracedPerCallKb": 0,
-          "allocLoKb": 1911.026748046875,
-          "allocHiKb": 1926.209990234375
+          "allocLoKb": 1912.731279296875,
+          "allocHiKb": 1929.123271484375
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -765,8 +765,8 @@
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "insert 500 rows",
-          "heldKb": 1061.9345703125,
-          "idleHeldKb": 915.4921875
+          "heldKb": 1061.7705078125,
+          "idleHeldKb": 915.328125
         }
       }
     },
@@ -776,9 +776,9 @@
       "level": "raw",
       "note": "1 parameter holding 100 000 values, text on both sides, built by each client",
       "iters": 3,
-      "msControl": 18.306777666666665,
-      "msDriver": 13.337333333333333,
-      "ratio": 0.7285462016408386,
+      "msControl": 18.172111333333334,
+      "msDriver": 12.717930666666668,
+      "ratio": 0.6998598254974372,
       "sign": {
         "wins": 41,
         "pairs": 41,
@@ -792,14 +792,14 @@
           "level": "raw",
           "iterations": 100,
           "heldKb": 355.7626953125,
-          "allocPerCallKb": 27900.5991796875,
-          "sustainedKb": 62423.51171875,
-          "sustainedRssKb": 202384,
+          "allocPerCallKb": 27924.308564453124,
+          "sustainedKb": 62418.33984375,
+          "sustainedRssKb": 202544,
           "wireKb": 0.0361328125,
           "wireOutKb": 1269.654287109375,
           "tracedPerCallKb": 0,
-          "allocLoKb": 27899.1969140625,
-          "allocHiKb": 27925.365595703126
+          "allocLoKb": 27899.5142578125,
+          "allocHiKb": 27926.523173828125
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
@@ -807,14 +807,14 @@
           "level": "raw",
           "iterations": 100,
           "heldKb": 1605.1435546875,
-          "allocPerCallKb": 983.600888671875,
-          "sustainedKb": 11845.58984375,
-          "sustainedRssKb": 106352,
+          "allocPerCallKb": 982.454248046875,
+          "sustainedKb": 11847.0419921875,
+          "sustainedRssKb": 106048,
           "wireKb": 0.0263671875,
           "wireOutKb": 1074.266591796875,
           "tracedPerCallKb": 0,
-          "allocLoKb": 981.809404296875,
-          "allocHiKb": 984.530888671875
+          "allocLoKb": 982.212919921875,
+          "allocHiKb": 983.195966796875
         },
         "heapPairs": 7,
         "heapWins": 7,
@@ -846,13 +846,13 @@
       "level": "raw",
       "note": "20 rows of 9 mixed columns, one statement each, returning the key, in one transaction",
       "iters": 3,
-      "msControl": 6.127972333333333,
-      "msDriver": 5.238194333333333,
-      "ratio": 0.8548005846632141,
+      "msControl": 6.207666666666667,
+      "msDriver": 5.329180333333333,
+      "ratio": 0.8584836492509262,
       "sign": {
-        "wins": 59,
+        "wins": 60,
         "pairs": 61,
-        "p": 1.6410484082740218e-15
+        "p": 5.3776427755280416e-17
       },
       "verdict": "faster",
       "memory": {
@@ -862,14 +862,14 @@
           "level": "raw",
           "iterations": 100,
           "heldKb": 557.548828125,
-          "allocPerCallKb": 294.22548828125,
-          "sustainedKb": 9779.4755859375,
-          "sustainedRssKb": 102560,
+          "allocPerCallKb": 293.468974609375,
+          "sustainedKb": 9772.3310546875,
+          "sustainedRssKb": 102912,
           "wireKb": 1.5576171875,
           "wireOutKb": 10.8927734375,
           "tracedPerCallKb": 0,
-          "allocLoKb": 288.93029296875,
-          "allocHiKb": 305.396328125
+          "allocLoKb": 287.49330078125,
+          "allocHiKb": 296.265390625
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
@@ -877,14 +877,14 @@
           "level": "raw",
           "iterations": 100,
           "heldKb": 855.1552734375,
-          "allocPerCallKb": 347.397724609375,
-          "sustainedKb": 8439.9052734375,
-          "sustainedRssKb": 99968,
+          "allocPerCallKb": 345.2145703125,
+          "sustainedKb": 8427.7158203125,
+          "sustainedRssKb": 99760,
           "wireKb": 0.8642578125,
           "wireOutKb": 7.048046875,
           "tracedPerCallKb": 0,
-          "allocLoKb": 342.925869140625,
-          "allocHiKb": 355.373095703125
+          "allocLoKb": 341.301962890625,
+          "allocHiKb": 356.858544921875
         },
         "heapPairs": 7,
         "heapWins": 0,
@@ -1406,13 +1406,13 @@
       "level": "orm",
       "note": "1 entity of 9 assigned columns, mixed types",
       "iters": 50,
-      "msControl": 0.70127584,
-      "msDriver": 0.6298558400000001,
-      "ratio": 0.8981570504410933,
+      "msControl": 0.7265883399999999,
+      "msDriver": 0.6615966799999999,
+      "ratio": 0.9105522943018877,
       "sign": {
-        "wins": 184,
+        "wins": 190,
         "pairs": 201,
-        "p": 1.3696494383525995e-36
+        "p": 2.707994318200268e-43
       },
       "verdict": "faster",
       "memory": {
@@ -1422,14 +1422,14 @@
           "level": "orm",
           "iterations": 1000,
           "heldKb": 1430.064453125,
-          "allocPerCallKb": 103.289083984375,
-          "sustainedKb": 17661.96875,
-          "sustainedRssKb": 126864,
+          "allocPerCallKb": 103.2357216796875,
+          "sustainedKb": 17688.2451171875,
+          "sustainedRssKb": 126416,
           "wireKb": 0.1220703125,
           "wireOutKb": 0.6029833984375,
           "tracedPerCallKb": 0,
-          "allocLoKb": 101.751931640625,
-          "allocHiKb": 103.9967119140625
+          "allocLoKb": 101.9971884765625,
+          "allocHiKb": 103.9384248046875
         },
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
@@ -1437,14 +1437,14 @@
           "level": "orm",
           "iterations": 1000,
           "heldKb": 1749.5458984375,
-          "allocPerCallKb": 121.5263583984375,
-          "sustainedKb": 14088.744140625,
-          "sustainedRssKb": 119696,
+          "allocPerCallKb": 121.0493037109375,
+          "sustainedKb": 14030.9384765625,
+          "sustainedRssKb": 119680,
           "wireKb": 0.0966796875,
           "wireOutKb": 0.412552734375,
           "tracedPerCallKb": 0,
-          "allocLoKb": 120.926677734375,
-          "allocHiKb": 121.7629052734375
+          "allocLoKb": 120.43066796875,
+          "allocHiKb": 121.711771484375
         },
         "heapPairs": 7,
         "heapWins": 0,
@@ -1465,13 +1465,13 @@
         "typeorm-postgrejs": {
           "client": "typeorm-postgrejs",
           "scenario": "save one entity",
-          "heldKb": 1749.5458984375,
-          "idleHeldKb": 1766.5234375
+          "heldKb": 1749.7177734375,
+          "idleHeldKb": 1766.6953125
         }
       }
     }
   },
-  "measuredAt": "2026-10-06T09:09:10.556Z",
+  "measuredAt": "2026-10-06T09:24:01.942Z",
   "node": "v24.15.0",
   "prepare": "default (cached per connection)",
   "heapPairs": 7,
@@ -1488,13 +1488,13 @@
     "prepared statements": {
       "name": "prepared statements",
       "note": "the same parameterized read, against `prepare: false`",
-      "msWithout": 0.30223330000000004,
-      "msWith": 0.2572875,
-      "ratio": 0.85128773037253,
+      "msWithout": 0.3078875,
+      "msWith": 0.2642083,
+      "ratio": 0.8581325971336934,
       "sign": {
-        "wins": 387,
+        "wins": 390,
         "pairs": 401,
-        "p": 1.01823847007174e-95
+        "p": 3.747142067235323e-100
       }
     }
   },
