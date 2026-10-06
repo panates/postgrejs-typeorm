@@ -58,10 +58,12 @@ describe('toPoolConfiguration', () => {
 });
 
 describe('resolveFacadeOptions', () => {
-  it('defaults to pg fidelity on every axis', () => {
+  it('defaults to pg fidelity on every axis but one, and leaves that unset', () => {
     const o = resolveFacadeOptions({});
     assert.strictEqual(o.decoding, 'pg');
-    assert.strictEqual(o.inferParameterTypes, false);
+    // Unset is a third policy rather than a missing `false` - see
+    // src/params.ts. `false` is the one that is pg byte for byte.
+    assert.strictEqual(o.inferParameterTypes, undefined);
     assert.strictEqual(o.parseInputDatesAsUTC, false);
     assert.strictEqual(o.normalizeErrors, true);
     assert.strictEqual(o.suppressRedundantPoolError, true);
@@ -73,6 +75,11 @@ describe('resolveFacadeOptions', () => {
     });
     assert.strictEqual(o.decoding, 'native');
     assert.strictEqual(o.inferParameterTypes, true);
+    assert.strictEqual(
+      resolveFacadeOptions({ postgrejs: { inferParameterTypes: false } })
+        .inferParameterTypes,
+      false,
+    );
   });
 
   it('leaves prepare unset so PostgreJS keeps its own default', () => {

@@ -43,16 +43,30 @@ import { prepareValue } from './prepare-value.js';
  * declared type - nothing - because the saving is in building the literal,
  * not in what is sent. `write a 100k int4[]` goes from level to 41/41.
  *
+ * ## Nothing is rendered on this path at all
+ *
+ * Binding at OID 0 used to mean `new BindParam(0, prepareValue(v))`, because
+ * PostgreJS wrote an undeclared parameter with `String(v)` - which destroyed
+ * a plain object (`[object Object]`), an object inside an array, and any
+ * value whose class implements `toPostgres()`. Fixed upstream in `a11a9af`,
+ * which writes an undeclared parameter the way `pg` writes one.
+ *
+ * Re-measured against that build, the eight shapes that still take this
+ * branch - `true`, `false`, a boolean array, a plain object, a nested
+ * object, a caller's `toPostgres()` class, a `Buffer`, an object carrying a
+ * `Date` - are **byte-identical to `pg` with no rendering at all**. So there
+ * is none: the value goes to `BindParam` as it arrived.
+ *
  * ## What `pg`'s renderer is still for
  *
  * `prepare-value.ts` is a port of `pg`'s own function, held to it by a test
- * that calls both. It stays, and `inferParameterTypes: false` runs it over
- * everything for code that wants the old behaviour exactly.
+ * that calls both. It is what `inferParameterTypes: false` runs, and that is
+ * now its only caller here - the mode for code that wants `pg`'s answers
+ * exactly, including the ones where `pg` loses information.
  *
- * **`parseInputDatesAsUTC` only has meaning there.** It is an option of
- * `pg`'s renderer, and a `Date` no longer reaches it on the default path -
- * PostgreJS sends one untyped, carrying the process's own offset, which is
- * what `pg` sends anyway.
+ * **`parseInputDatesAsUTC` only has meaning there**, for the same reason: it
+ * is an option of `pg`'s renderer, and nothing on the default path reaches
+ * it.
  */
 
 /**
@@ -71,7 +85,7 @@ import { prepareValue } from './prepare-value.js';
  *   string[]     text    text      same
  *   Buffer       bytea   bytea     DECLARED (see below)
  *   null         text    text      same
- *   number       text    int4 / numeric   DECLARED
+ *   number       text    int4 / numeric   declared - and allowed to be
  *   boolean      text    bool             DECLARED
  *   boolean[]    text    bool[]           DECLARED
  *   plain object text    json             DECLARED
@@ -97,7 +111,14 @@ import { prepareValue } from './prepare-value.js';
 function postgrejsWouldDeclare(v: any): boolean {
   if (v === null || v === undefined) return false;
   const t = typeof v;
-  if (t === 'number' || t === 'boolean') return true;
+  // Not `number`. PostgreJS declaring `int4`/`numeric` is the right answer
+  // for a value the caller passed as a number - `insert into t (q bigint)
+  // values ($1)` with 2.7 writes 3, which is what plain SQL does with the
+  // literal, where `pg` sends text and the server's input parser refuses it.
+  // It cost sixty-seven TypeORM tests until the cause was found, and the
+  // cause was TypeORM sending 1 for a boolean column: see
+  // `typeorm-boolean.ts`.
+  if (t === 'boolean') return true;
   if (Array.isArray(v)) return v.some(e => typeof e === 'boolean');
   if (t !== 'object') return false;
   return !(v instanceof Date);
@@ -111,6 +132,15 @@ export function toBindParams(
   const l = values.length;
   const out = new Array(l);
   let i: number;
+  if (options.inferParameterTypes === false) {
+    // Exactly `pg`: render everything, declare nothing.
+    const utcAll = options.parseInputDatesAsUTC;
+    for (i = 0; i < l; i++) {
+      const rendered = prepareValue(values[i], undefined, utcAll);
+      out[i] = new BindParam(UNSPECIFIED_OID, rendered);
+    }
+    return out;
+  }
   if (options.inferParameterTypes) {
     // The escape hatch: hand the values over untouched and let PostgreJS
     // derive an OID from each. Keeps the binary encoders in play, at the
@@ -119,24 +149,14 @@ export function toBindParams(
     for (i = 0; i < l; i++) out[i] = values[i];
     return out;
   }
-  const utc = options.parseInputDatesAsUTC;
-  let v: string | Buffer | null;
   for (i = 0; i < l; i++) {
-    if (!postgrejsWouldDeclare(values[i])) {
-      // PostgreJS sends this one unspecified too, so its own path is `pg`'s
-      // answer reached more cheaply. See `postgrejsWouldDeclare`.
-      out[i] = values[i];
-      continue;
-    }
-    v = prepareValue(values[i], undefined, utc);
-    // A Buffer keeps its bytes - `prepareValue` returns it unchanged - but
-    // it is still bound at OID 0, which is the correction. Handed to
-    // PostgreJS directly it declares `bytea`, where `pg` declares nothing
-    // and lets the server decide: `select $1` on raw bytes is 22021 under
-    // `pg` and a Buffer back without this. Both answer `0102ff` for
-    // `$1::bytea`, which is why it went unnoticed until the surface was
-    // pinned.
-    out[i] = new BindParam(UNSPECIFIED_OID, v);
+    // Two outcomes, and neither renders anything. A value PostgreJS would
+    // declare a type for is bound at OID 0 instead, where it writes the same
+    // text `pg` writes; everything else is handed over, because PostgreJS
+    // already sends it untyped for the same reasons `pg` does.
+    out[i] = postgrejsWouldDeclare(values[i])
+      ? new BindParam(UNSPECIFIED_OID, values[i])
+      : values[i];
   }
   return out;
 }

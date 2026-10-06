@@ -34,8 +34,21 @@ export interface PgjsFacadeOptions {
   decoding?: 'pg' | 'native';
 
   /**
-   * Let PostgreJS derive an OID per parameter from the JS value instead of
-   * declaring every parameter unspecified the way `pg` does.
+   * Which of the three parameter policies to use. **Leave it unset** unless
+   * you have a reason not to; see `params.ts` for what the default does and
+   * why.
+   *
+   * - unset - the default. PostgreJS types the values it types the way the
+   *   database would, `pg`'s own renderer runs for the rest.
+   * - `true` - hand every value to PostgreJS.
+   * - `false` - render every value with `pg`'s own function and declare
+   *   nothing, which is `pg` byte for byte. For code that depends on `pg`'s
+   *   answers exactly, including the ones where `pg` loses information:
+   *   `select $1` with `12` gives the string `'12'`, and `select $1 * 2`
+   *   raises `22P02`.
+   *
+   * The historical name is kept because it is what the option has always
+   * been called; it is no longer only about inferring.
    *
    * Off by default, and it is not the same thing as being faster: see
    * `params.ts` for what it changes and `doc/DRIVER-DESIGN.md` §5 for the
@@ -175,11 +188,16 @@ export interface PgCompatibleConfig {
 }
 
 export interface ResolvedFacadeOptions extends Required<
-  Omit<PgjsFacadeOptions, 'fetchAsString' | 'prepare' | 'decoding'>
+  Omit<
+    PgjsFacadeOptions,
+    'fetchAsString' | 'prepare' | 'decoding' | 'inferParameterTypes'
+  >
 > {
   decoding: 'pg' | 'native';
   fetchAsString?: FetchAsStringItem[];
   prepare?: boolean;
+  /** Unset is the default policy - see `params.ts`. */
+  inferParameterTypes?: boolean;
 }
 
 export function resolveFacadeOptions(
@@ -188,7 +206,7 @@ export function resolveFacadeOptions(
   const o = config.postgrejs ?? {};
   return {
     decoding: o.decoding ?? 'pg',
-    inferParameterTypes: o.inferParameterTypes ?? false,
+    inferParameterTypes: o.inferParameterTypes,
     parseInputDatesAsUTC: o.parseInputDatesAsUTC ?? false,
     fetchAsString: o.fetchAsString,
     prepare: o.prepare,

@@ -26,10 +26,7 @@ describe('toBindParams', () => {
    * column's OID. This half is about which branch each one takes.
    */
   it('renders only what PostgreJS would declare a type for', () => {
-    const declared = toBindParams(
-      [1, 1.5, true, [true, false], { a: 1 }],
-      pgFaithful,
-    )!;
+    const declared = toBindParams([true, [true, false], { a: 1 }], pgFaithful)!;
     for (const p of declared) {
       assert.ok(p instanceof BindParam, 'should have been rendered');
       assert.strictEqual((p as any).oid, UNSPECIFIED_OID);
@@ -40,7 +37,10 @@ describe('toBindParams', () => {
     const date = new Date('2024-03-05T00:00:00Z');
     const numbers = [1, 2];
     const strings = ['a', 'b'];
-    const out = toBindParams(['a', date, numbers, strings, null], pgFaithful)!;
+    const out = toBindParams(
+      ['a', date, numbers, strings, null, 7, 1.5],
+      pgFaithful,
+    )!;
     assert.strictEqual(out[0], 'a');
     assert.strictEqual(out[1], date);
     // By identity: the array is not copied, let alone rendered. This is the
@@ -49,12 +49,37 @@ describe('toBindParams', () => {
     assert.strictEqual(out[2], numbers);
     assert.strictEqual(out[3], strings);
     assert.strictEqual(out[4], null);
+    // Numbers too, since 2026-10-06: PostgreJS declaring `int4`/`numeric`
+    // is the answer the database gives for the value the caller passed.
+    assert.strictEqual(out[5], 7);
+    assert.strictEqual(out[6], 1.5);
     for (const p of out) assert.ok(!(p instanceof BindParam));
   });
 
-  it('renders a plain object the way pg does', () => {
-    const out = toBindParams([{ a: 1 }], pgFaithful)! as BindParam[];
+  /**
+   * It used to render it with `pg`'s function first, because PostgreJS wrote
+   * an undeclared parameter with `String(v)` and an object came out
+   * `[object Object]`. Fixed upstream in `a11a9af`; the object now goes to
+   * `BindParam` as it arrived and PostgreJS writes `pg`'s own text for it.
+   * `test/B-live/params.spec.ts` is where that is held to a server.
+   */
+  it('binds a plain object at OID 0 without rendering it', () => {
+    const obj = { a: 1 };
+    const out = toBindParams([obj], pgFaithful)! as BindParam[];
+    assert.ok(out[0] instanceof BindParam);
+    assert.strictEqual((out[0] as any).oid, UNSPECIFIED_OID);
+    assert.strictEqual((out[0] as any).value, obj);
+  });
+
+  it('renders everything when asked for pg exactly', () => {
+    const exact = resolveFacadeOptions({
+      postgrejs: { inferParameterTypes: false },
+    });
+    const out = toBindParams([{ a: 1 }, 7, [1, 2]], exact)! as BindParam[];
     assert.strictEqual((out[0] as any).value, '{"a":1}');
+    assert.strictEqual((out[1] as any).value, '7');
+    assert.strictEqual((out[2] as any).value, '{"1","2"}');
+    for (const p of out) assert.strictEqual((p as any).oid, UNSPECIFIED_OID);
   });
 
   it('hands an empty array and an all-null one over too', () => {
