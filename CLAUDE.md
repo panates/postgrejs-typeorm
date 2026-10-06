@@ -75,6 +75,18 @@ the only remaining advantage. Do not reopen that without new evidence.
 
 ## Where things are
 
+> **The peer floor is wrong and has to be raised before this ships.** Since 2026-10-06 the
+> parameter policy depends on two commits that are on `dev` and **unreleased**:
+>
+> | commit | what the default path needs it for |
+> | --- | --- |
+> | `341f343` | a non-integer scalar declared `numeric`, not `float8` - without it `$1::money` with `12.34` is `42846` |
+> | `a11a9af` | an undeclared parameter written the way `pg` writes one - without it a plain object bound at OID 0 is `[object Object]` |
+>
+> The version carrying them is not known yet and is deliberately not guessed at here. When upstream
+> releases, set the floor to it. The table below is the history of the old floor and is accurate for
+> everything except this.
+
 - **PostgreJS**: `../postgrejs`. Its `CLAUDE.md` describes the internals. Peer is **`>=3.10.0 <4`**,
   and that floor is exact rather than cautious - `src/` uses six things that all landed in 3.10.0
   and nothing works without them:
@@ -134,7 +146,25 @@ that was expensive to arrive at, with the reason next to it.
 - `prepare-value.ts` - `pg`'s own parameter rendering, **ported, not imported**. A facade whose
   purpose is to replace `pg` cannot depend on `pg` at runtime. Held to the original by a test that
   calls both.
-- `params.ts` - the policy: `prepareValue()` then OID 0, for everything.
+- `params.ts` - the policy, and **nothing is rendered on its default path**. A value PostgreJS
+  would declare a type for is bound at OID 0 instead, where since `a11a9af` it writes exactly what
+  `pg` writes - measured byte for byte over eight shapes, a caller's own `toPostgres()` class
+  among them. Everything else is handed over untouched, because PostgreJS already sends it untyped
+  for the same reasons `pg` does.
+
+  **A number is the one deliberate divergence from `pg`.** It is declared, so
+  `insert into t (q bigint) values ($1)` with `2.7` writes `3` - what plain SQL does with the
+  literal - where `pg` sends text and the input parser refuses it. `select $1 * 2` works for the
+  same reason. Pinned on both sides in `test/B-live/params.spec.ts` rather than skipped.
+
+  `inferParameterTypes` is three-state: unset is the above, `true` hands everything over, `false`
+  renders everything with `pg`'s own function and is `pg` byte for byte. `prepare-value.ts` exists
+  for that third mode now, and is still held to `pg`'s function by a test that calls both.
+- `typeorm-boolean.ts` - **a workaround, here on an explicit decision against the rule below.**
+  TypeORM's own driver sends `1` for a `boolean` column, which only works because `pg` declares
+  nothing for a parameter. It is sixty-seven of TypeORM's own tests and a broken insert in any
+  application with a boolean column. Applied on import; `TYPEORM_POSTGREJS_NO_BOOLEAN_PATCH=1`
+  skips it. **Remove it when TypeORM fixes it.**
 - `constants.ts` - the `fetchAsString` OID list. **An array OID there behaves differently from a
   scalar one** - it makes the whole literal come back as one string - so it belongs there only where
   `pg` also returns a string. That is the geometric family except `point[]`.
