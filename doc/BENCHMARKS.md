@@ -64,23 +64,27 @@ nobody asked, under a name that promises otherwise.
 
 ## Results
 
-**Two axes, three tables, and the join is worth knowing before reading them.** Every scenario is
-either a read or a write, and runs either on a bare connection or through a TypeORM repository:
+Every scenario is either a read or a write, and each is measured twice - on a bare connection, and
+through a TypeORM repository:
 
 | | without the ORM | through TypeORM |
 | --- | --- | --- |
 | reading | 10 rows | 11 rows |
 | writing | 4 rows | 4 rows |
 
-**The right-hand column is the one to read**, and it is the reason this file exists rather than
-PostgreJS's own benchmark. A reader of this package runs TypeORM; what they get is the right-hand
-column, hydration included. Every shape in the left-hand column has a counterpart in the right-hand
-one so that the two can be compared directly.
+**What is printed is what a reader of this package gets**, which is TypeORM with hydration on top.
 
-The left-hand column is kept for attribution rather than as a headline: entity hydration sits on
-top of everything and dilutes any gain, so a row that moves at both levels is the client's and a
-row that moves only at one is the layer above it. Neither answer substitutes for the other, and
-without the raw level there is no way to tell which of the two a number belongs to.
+Every shape is *also* measured one layer down, on a bare connection where the difference is the
+client and nothing else. Those rows are not printed, because they turned out to restate the answer:
+12 of the 14 pairs say the same thing at both levels, within
+0.15x on the clock and 15 points on allocation. Printing them
+doubled the table to repeat it.
+
+They are still run and still in `results/latest.json`, because the comparison is what says
+whether a gain is the client's or the layer above it - and because it occasionally disagrees:
+
+- **find 5000 entities** is 1.39x through TypeORM and 1.09x as `all 5000 rows` without it, on -30% against -33% allocated.
+- **insert 500 entities** is 1.10x through TypeORM and 1.15x as `insert 500 rows` without it, on -9% against -24% allocated.
 
 ### Through TypeORM, reading
 
@@ -106,30 +110,6 @@ without the raw level there is no way to tell which of the two a number belongs 
 | insert 500 entities - 500 entities of 9 mixed columns in 1 statement | 10.672 ms<br>9.0 MB/call | **9.671 ms**<br>**8.2 MB/call** | **1.10x**<br>**-9%** |
 | save a 100k int4[] - 1 entity holding 1 array of 100 000 values | 18.217 ms<br>27.3 MB/call | **12.630 ms**<br>**1020 KB/call** | **1.44x**<br>**-96%** |
 | twenty saves in a transaction - 20 entities of 9 mixed columns, one statement each, in one transaction | 6.938 ms<br>**977 KB/call** | **5.875 ms**<br>1021 KB/call | **1.18x**<br>+4% |
-
-### Reading, without the ORM
-
-| Scenario | `pg`<br>allocated per call | `typeorm-postgrejs`<br>allocated per call | |
-| --- | --- | --- | --- |
-| point read - 1 row of 9 columns | 0.277 ms<br>16 KB/call | **0.239 ms**<br>18 KB/call | **1.16x**<br>+9% level |
-| page of 100 - 100 rows of 9 columns, mixed types | 0.543 ms<br>235 KB/call | **0.461 ms**<br>**156 KB/call** | **1.18x**<br>**-34%** |
-| all 5000 rows - 5000 rows of 9 columns | 6.227 ms<br>10.2 MB/call | **5.712 ms**<br>**6.8 MB/call** | **1.09x**<br>**-33%** |
-| float8 spread over rows - 5000 rows of 1 value | 1.191 ms<br>1.3 MB/call | **0.805 ms**<br>**1.0 MB/call** | **1.48x**<br>**-25%** |
-| float8 packed in one row - 1 row holding 1 array of 5000 values | 2.097 ms<br>2.7 MB/call | **0.581 ms**<br>**211 KB/call** | **3.61x**<br>**-92%** |
-| int4[] of 100k - 1 row holding 1 array of 100 000 values | 22.818 ms<br>23.5 MB/call | **5.881 ms**<br>**2.2 MB/call** | **3.88x**<br>**-91%** |
-| bytea of 4 MB - 1 row holding 4 MB | 33.805 ms<br>51.6 MB/call | **14.660 ms**<br>**4.0 MB/call** | **2.31x**<br>**-92%** |
-| uuid of 5k rows - 5000 rows of 1 value, sixteen bytes against thirty-six characters | 1.259 ms<br>1.5 MB/call | **0.874 ms**<br>**1.3 MB/call** | **1.44x**<br>**-9%** |
-| box of 5k rows - 5000 rows of 1 value, asked for as text on both sides | 2.246 ms<br>**1.9 MB/call** | **2.010 ms**<br>2.0 MB/call | **1.12x**<br>+3% |
-| concurrent reads - 20 reads at once of 100 rows each, pool of 10 | 3.575 ms<br>4.4 MB/call | **2.887 ms**<br>**2.9 MB/call** | **1.24x**<br>**-34%** |
-
-### Writing, without the ORM
-
-| Scenario | `pg`<br>allocated per call | `typeorm-postgrejs`<br>allocated per call | |
-| --- | --- | --- | --- |
-| insert one row - 1 row of 9 mixed columns, returning the key | 0.268 ms<br>**16 KB/call** | **0.223 ms**<br>18 KB/call | **1.20x**<br>+12% |
-| insert 500 rows - 500 rows of 9 mixed columns in 1 statement, 4500 parameters | 6.742 ms<br>2.5 MB/call | **5.874 ms**<br>**1.9 MB/call** | **1.15x**<br>**-24%** |
-| write a 100k int4[] - 1 parameter holding 100 000 values, text on both sides, built by each client | 18.282 ms<br>27.3 MB/call | **13.081 ms**<br>**982 KB/call** | **1.40x**<br>**-96%** |
-| twenty inserts in a transaction - 20 rows of 9 mixed columns, one statement each, returning the key, in one transaction | 5.588 ms<br>**293 KB/call** | **4.583 ms**<br>349 KB/call | **1.22x**<br>+19% |
 
 ## Reading them
 

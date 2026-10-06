@@ -78,6 +78,46 @@ const pick = (group, level) =>
 const rowCount = list => `${list.length} row${list.length === 1 ? '' : 's'}`;
 
 /**
+ * **Whether the two levels agree, computed rather than asserted.**
+ *
+ * Each ORM scenario names the raw shape it is the other half of
+ * (`mirrors`). A pair agrees when the speedup and the allocation ratio are
+ * both within the band below. The band is wide on purpose: this is asking
+ * "does the raw row tell a reader anything the ORM row did not", not
+ * whether two measurements are equal.
+ */
+const AGREE_BAND = 0.15;
+
+const agreement = (() => {
+  const pairs = [];
+  for (const s of rows) {
+    if (!s.mirrors) continue;
+    const twin = rows.find(t => t.name === s.mirrors);
+    if (!twin) continue;
+    const dSpeed = Math.abs(1 / s.ratio - 1 / twin.ratio);
+    const a = memRatio(s);
+    const b = memRatio(twin);
+    const dMem = a !== undefined && b !== undefined ? Math.abs(a - b) : 0;
+    pairs.push({ s, twin, agrees: dSpeed <= AGREE_BAND && dMem <= AGREE_BAND });
+  }
+  const off = pairs.filter(p => !p.agrees);
+  const say = p =>
+    `- **${p.s.name}** is ${speedup(p.s.ratio)} through TypeORM and ` +
+    `${speedup(p.twin.ratio)} as \`${p.twin.name}\` without it` +
+    (memRatio(p.s) !== undefined && memRatio(p.twin) !== undefined
+      ? `, on ${pct(memRatio(p.s) - 1)} against ${pct(memRatio(p.twin) - 1)} allocated`
+      : '') +
+    '.';
+  return {
+    total: pairs.length,
+    agree: pairs.length - off.length,
+    lines: off.length
+      ? off.map(say).join('\n')
+      : '- Nothing disagreed in this run, which is itself worth recording.',
+  };
+})();
+
+/**
  * The rows that win on **both** columns, which is what "large payload"
  * means here. Selecting on the clock alone pulls in the spread half of the
  * float8 pair, which the next paragraph then calls close on memory - two
@@ -207,23 +247,26 @@ nobody asked, under a name that promises otherwise.
 
 ## Results
 
-**Two axes, three tables, and the join is worth knowing before reading them.** Every scenario is
-either a read or a write, and runs either on a bare connection or through a TypeORM repository:
+Every scenario is either a read or a write, and each is measured twice - on a bare connection, and
+through a TypeORM repository:
 
 | | without the ORM | through TypeORM |
 | --- | --- | --- |
 | reading | ${rowCount(pick('Read', 'raw'))} | ${rowCount(pick('Read', 'orm'))} |
 | writing | ${rowCount(pick('Write', 'raw'))} | ${rowCount(pick('Write', 'orm'))} |
 
-**The right-hand column is the one to read**, and it is the reason this file exists rather than
-PostgreJS's own benchmark. A reader of this package runs TypeORM; what they get is the right-hand
-column, hydration included. Every shape in the left-hand column has a counterpart in the right-hand
-one so that the two can be compared directly.
+**What is printed is what a reader of this package gets**, which is TypeORM with hydration on top.
 
-The left-hand column is kept for attribution rather than as a headline: entity hydration sits on
-top of everything and dilutes any gain, so a row that moves at both levels is the client's and a
-row that moves only at one is the layer above it. Neither answer substitutes for the other, and
-without the raw level there is no way to tell which of the two a number belongs to.
+Every shape is *also* measured one layer down, on a bare connection where the difference is the
+client and nothing else. Those rows are not printed, because they turned out to restate the answer:
+${agreement.agree} of the ${agreement.total} pairs say the same thing at both levels, within
+${AGREE_BAND}x on the clock and ${Math.round(AGREE_BAND * 100)} points on allocation. Printing them
+doubled the table to repeat it.
+
+They are still run and still in \`results/latest.json\`, because the comparison is what says
+whether a gain is the client's or the layer above it - and because it occasionally disagrees:
+
+${agreement.lines}
 
 ### Through TypeORM, reading
 
@@ -232,14 +275,6 @@ ${table(pick('Read', 'orm'))}
 ### Through TypeORM, writing
 
 ${table(pick('Write', 'orm'))}
-
-### Reading, without the ORM
-
-${table(pick('Read', 'raw'))}
-
-### Writing, without the ORM
-
-${table(pick('Write', 'raw'))}
 
 ## Reading them
 

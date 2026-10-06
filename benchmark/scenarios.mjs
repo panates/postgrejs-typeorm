@@ -821,6 +821,8 @@ export const SCENARIOS = [
   // ---- the same work through TypeORM ---------------------------------
   {
     name: 'findOneBy',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'point read',
     group: 'Read',
     level: 'orm',
     note: '1 entity of 9 columns',
@@ -831,6 +833,8 @@ export const SCENARIOS = [
   },
   {
     name: 'find 100 entities',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'page of 100',
     group: 'Read',
     level: 'orm',
     note: '100 entities of 9 columns',
@@ -843,6 +847,8 @@ export const SCENARIOS = [
   },
   {
     name: 'find 5000 entities',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'all 5000 rows',
     group: 'Read',
     level: 'orm',
     note: '5000 entities of 9 columns',
@@ -871,6 +877,8 @@ export const SCENARIOS = [
   },
   {
     name: 'findOne with a 4 MB bytea',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'bytea of 4 MB',
     group: 'Read',
     level: 'orm',
     note: '1 entity holding 4 MB',
@@ -884,6 +892,8 @@ export const SCENARIOS = [
   },
   {
     name: 'findOne with a 100k int4[]',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'int4[] of 100k',
     group: 'Read',
     level: 'orm',
     note: '1 entity holding 1 array of 100 000 values',
@@ -900,6 +910,8 @@ export const SCENARIOS = [
      * one float8, where the per-row cost is most of what either client
      * pays. */
     name: 'find 5000 floats',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'float8 spread over rows',
     group: 'Read',
     level: 'orm',
     note: '5000 entities of 1 float8',
@@ -911,6 +923,8 @@ export const SCENARIOS = [
     /* And of `float8 packed in one row` - the same 5000 values as one
      * array, which is where `pg` has to cut a substring per element. */
     name: 'findOne a 5000-float array',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'float8 packed in one row',
     group: 'Read',
     level: 'orm',
     note: '1 entity holding 1 array of 5000 float8',
@@ -925,6 +939,8 @@ export const SCENARIOS = [
     /* `uuid of 5k rows`, one layer up: sixteen bytes against thirty-six
      * characters, so this is where binary is shorter. */
     name: 'find 5000 uuids',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'uuid of 5k rows',
     group: 'Read',
     level: 'orm',
     note: '5000 entities of 1 uuid',
@@ -936,6 +952,8 @@ export const SCENARIOS = [
     /* `box of 5k rows`, one layer up. Asked for as text on both sides, so
      * what is compared is the row machinery rather than a decoder. */
     name: 'find 5000 boxes',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'box of 5k rows',
     group: 'Read',
     level: 'orm',
     note: '5000 entities of 1 box, asked for as text on both sides',
@@ -951,6 +969,8 @@ export const SCENARIOS = [
      * is why this is the one ORM scenario that keeps the pool.
      */
     name: 'concurrent finds',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'concurrent reads',
     group: 'Read',
     level: 'orm',
     note: '20 finds at once of 100 entities each, pool of 10',
@@ -972,6 +992,8 @@ export const SCENARIOS = [
     /* `insert 500 rows`, one layer up. `insert()` rather than `save()`:
      * `save` would load each entity first, which measures the read path. */
     name: 'insert 500 entities',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'insert 500 rows',
     group: 'Write',
     level: 'orm',
     note: '500 entities of 9 mixed columns in 1 statement',
@@ -1009,6 +1031,8 @@ export const SCENARIOS = [
     /* `write a 100k int4[]`, one layer up - the send side of
      * `findOne with a 100k int4[]`. */
     name: 'save a 100k int4[]',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'write a 100k int4[]',
     group: 'Write',
     level: 'orm',
     note: '1 entity holding 1 array of 100 000 values',
@@ -1024,6 +1048,8 @@ export const SCENARIOS = [
     /* `twenty inserts in a transaction`, one layer up: TypeORM's own
      * transaction, which checks a connection out and holds it. */
     name: 'twenty saves in a transaction',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'twenty inserts in a transaction',
     group: 'Write',
     level: 'orm',
     note: '20 entities of 9 mixed columns, one statement each, in one transaction',
@@ -1071,6 +1097,8 @@ export const SCENARIOS = [
      * carries.
      */
     name: 'save one entity',
+    /** The shape this is the ORM half of - see `mirrors` in bench.mjs. */
+    mirrors: 'insert one row',
     group: 'Write',
     level: 'orm',
     note: '1 entity of 9 assigned columns, mixed types',

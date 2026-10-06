@@ -136,6 +136,9 @@ async function latency(scenarios) {
           group: s.group,
           level: s.level,
           note: s.note,
+          // The raw scenario this is the ORM half of, so the document can
+          // state whether the two levels agree without printing both.
+          mirrors: s.mirrors,
           iters: s.iters,
           msControl: control,
           msDriver: driver,
