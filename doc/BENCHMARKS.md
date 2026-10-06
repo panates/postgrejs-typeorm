@@ -3,8 +3,14 @@
 Generated from `benchmark/results/latest.json` by `benchmark/render-report.mjs`. Re-measure with
 `node benchmark/bench.mjs`; nothing here is written by hand.
 
-Node v24.15.0, `postgrejs` 3.12.2, `pg` 8.23.0, `typeorm` 1.1.1,
+Node v24.15.0, `postgrejs` 3.12.1, `pg` 8.23.0, `typeorm` 1.1.1,
 PostgreSQL 18.6 on loopback. Prepared statements: default (cached per connection).
+
+> **The PostgreJS measured here is not a published build** - it is a build put into node_modules by hand, where the lockfile installed 3.12.2.
+> This package is developed against the build in the next directory, because PostgreJS releases
+> before it does and an unreleased fix is a scheduling detail, so these figures lead the registry
+> rather than describing it. Installing 3.12.1 will not reproduce them.
+> Re-measure before release.
 PostgreJS's `asyncErrorHandling` is **off** here: it
 captures a caller-preserving async stack on every call and `pg` has nothing equivalent, so
 leaving it on would charge one client for a feature the comparison does not cover. Measured, it is
@@ -62,59 +68,59 @@ nobody asked, under a name that promises otherwise.
 
 | Scenario | `pg`<br>allocated per call | `typeorm-postgrejs`<br>allocated per call | |
 | --- | --- | --- | --- |
-| point read - 1 row of 9 columns | 0.276 ms<br>**17 KB/call** | **0.238 ms**<br>18 KB/call | **1.16x**<br>+6% |
-| page of 100 - 100 rows of 9 columns, mixed types | 0.532 ms<br>234 KB/call | **0.461 ms**<br>**157 KB/call** | **1.15x**<br>**-33%** |
-| all 5000 rows - 5000 rows of 9 columns | 6.072 ms<br>10.3 MB/call | **4.182 ms**<br>**6.9 MB/call** | **1.45x**<br>**-33%** |
-| float8 spread over rows - 5000 rows of 1 value | 1.147 ms<br>1.3 MB/call | **0.664 ms**<br>**1.0 MB/call** | **1.73x**<br>**-23%** |
-| float8 packed in one row - 1 row holding 1 array of 5000 values | 2.149 ms<br>2.8 MB/call | **0.575 ms**<br>**209 KB/call** | **3.74x**<br>**-93%** |
-| int4[] of 100k - 1 row holding 1 array of 100 000 values | 22.396 ms<br>22.8 MB/call | **5.794 ms**<br>**2.2 MB/call** | **3.87x**<br>**-90%** |
-| bytea of 4 MB - 1 row holding 4 MB | 34.099 ms<br>51.5 MB/call | **14.973 ms**<br>**4.1 MB/call** | **2.28x**<br>**-92%** |
-| uuid of 5k rows - 5000 rows of 1 value, sixteen bytes against thirty-six characters | 1.319 ms<br>1.5 MB/call | **0.841 ms**<br>**1.4 MB/call** | **1.57x**<br>**-5%** |
-| box of 5k rows - 5000 rows of 1 value, asked for as text on both sides | 2.291 ms<br>**1.9 MB/call** | **2.038 ms**<br>2.0 MB/call | **1.12x**<br>+3% |
-| concurrent reads - 20 reads at once of 100 rows each, pool of 10 | 3.606 ms<br>4.4 MB/call | **2.701 ms**<br>**2.9 MB/call** | **1.33x**<br>**-33%** |
+| point read - 1 row of 9 columns | 0.297 ms<br>**17 KB/call** | **0.255 ms**<br>18 KB/call | **1.16x**<br>+5% |
+| page of 100 - 100 rows of 9 columns, mixed types | 0.546 ms<br>236 KB/call | **0.468 ms**<br>**156 KB/call** | **1.17x**<br>**-34%** |
+| all 5000 rows - 5000 rows of 9 columns | 6.184 ms<br>10.3 MB/call | **4.078 ms**<br>**6.9 MB/call** | **1.52x**<br>**-34%** |
+| float8 spread over rows - 5000 rows of 1 value | 1.102 ms<br>1.3 MB/call | **0.764 ms**<br>**1.0 MB/call** | **1.44x**<br>**-24%** |
+| float8 packed in one row - 1 row holding 1 array of 5000 values | 2.140 ms<br>2.7 MB/call | **0.579 ms**<br>**213 KB/call** | **3.70x**<br>**-92%** |
+| int4[] of 100k - 1 row holding 1 array of 100 000 values | 22.657 ms<br>22.7 MB/call | **5.762 ms**<br>**2.2 MB/call** | **3.93x**<br>**-90%** |
+| bytea of 4 MB - 1 row holding 4 MB | 31.232 ms<br>51.4 MB/call | **13.937 ms**<br>**4.0 MB/call** | **2.24x**<br>**-92%** |
+| uuid of 5k rows - 5000 rows of 1 value, sixteen bytes against thirty-six characters | 1.318 ms<br>1.5 MB/call | **0.785 ms**<br>**1.3 MB/call** | **1.68x**<br>**-11%** |
+| box of 5k rows - 5000 rows of 1 value, asked for as text on both sides | 2.053 ms<br>**1.9 MB/call** | **1.964 ms**<br>2.0 MB/call | 1.05x level<br>+5% |
+| concurrent reads - 20 reads at once of 100 rows each, pool of 10 | 3.355 ms<br>4.3 MB/call | **2.612 ms**<br>**3.0 MB/call** | **1.28x**<br>**-32%** |
 
 ### Writing
 
 | Scenario | `pg`<br>allocated per call | `typeorm-postgrejs`<br>allocated per call | |
 | --- | --- | --- | --- |
-| insert one row - 1 row, 1 parameter, nothing returned | 0.239 ms<br>**9 KB/call** | **0.201 ms**<br>14 KB/call | **1.19x**<br>+58% |
-| insert 500 rows - 500 rows in 1 statement, 2500 parameters | 3.050 ms<br>**948 KB/call** | **2.413 ms**<br>1.0 MB/call | **1.26x**<br>+12% |
-| write a 100k int4[] - 1 parameter holding 100 000 values, text on both sides | **18.060 ms**<br>**27.2 MB/call** | 18.129 ms<br>28.0 MB/call | 1.00x level<br>+3% |
-| twenty inserts in a transaction - 20 rows, one statement each, inside one transaction | 5.021 ms<br>**162 KB/call** | **4.250 ms**<br>271 KB/call | **1.18x**<br>+68% |
+| insert one row - 1 row, 1 parameter, nothing returned | 0.234 ms<br>**9 KB/call** | **0.196 ms**<br>14 KB/call | **1.19x**<br>+52% |
+| insert 500 rows - 500 rows in 1 statement, 2500 parameters | 3.366 ms<br>**948 KB/call** | **3.238 ms**<br>1.0 MB/call | 1.04x level<br>+11% |
+| write a 100k int4[] - 1 parameter holding 100 000 values, text on both sides | 18.142 ms<br>**27.2 MB/call** | **17.835 ms**<br>27.5 MB/call | 1.02x level<br>+1% |
+| twenty inserts in a transaction - 20 rows, one statement each, inside one transaction | 4.973 ms<br>**164 KB/call** | **4.241 ms**<br>266 KB/call | **1.17x**<br>+62% |
 
 ### Through TypeORM
 
 | Scenario | `pg`<br>allocated per call | `typeorm-postgrejs`<br>allocated per call | |
 | --- | --- | --- | --- |
-| findOneBy - 1 entity of 9 columns | 0.296 ms<br>**64 KB/call** | **0.246 ms**<br>69 KB/call | **1.20x**<br>+7% |
-| find 100 entities - 100 entities of 9 columns | 0.601 ms<br>404 KB/call | **0.525 ms**<br>**318 KB/call** | **1.14x**<br>**-21%** |
-| find 5000 entities - 5000 entities of 9 columns | 8.562 ms<br>15.9 MB/call | **5.967 ms**<br>**11.3 MB/call** | **1.44x**<br>**-29%** |
-| queryBuilder, 500 entities - 500 entities after a where and an order by | 1.245 ms<br>1.7 MB/call | **1.049 ms**<br>**1.1 MB/call** | **1.19x**<br>**-38%** |
-| findOne with a 4 MB bytea - 1 entity holding 4 MB | 36.747 ms<br>51.7 MB/call | **16.425 ms**<br>**4.2 MB/call** | **2.24x**<br>**-92%** |
-| findOne with a 100k int4[] - 1 entity holding 1 array of 100 000 values | 23.249 ms<br>23.4 MB/call | **6.287 ms**<br>**2.2 MB/call** | **3.70x**<br>**-90%** |
-| save one entity - 1 entity of 1 assigned column | 0.685 ms<br>**79 KB/call** | **0.614 ms**<br>98 KB/call | **1.12x**<br>+24% |
+| findOneBy - 1 entity of 9 columns | 0.313 ms<br>**64 KB/call** | **0.269 ms**<br>68 KB/call | **1.17x**<br>+6% |
+| find 100 entities - 100 entities of 9 columns | 0.593 ms<br>404 KB/call | **0.520 ms**<br>**313 KB/call** | **1.14x**<br>**-22%** |
+| find 5000 entities - 5000 entities of 9 columns | 9.081 ms<br>15.9 MB/call | **6.014 ms**<br>**11.1 MB/call** | **1.51x**<br>**-30%** |
+| queryBuilder, 500 entities - 500 entities after a where and an order by | 1.166 ms<br>1.7 MB/call | **0.974 ms**<br>**1.1 MB/call** | **1.20x**<br>**-37%** |
+| findOne with a 4 MB bytea - 1 entity holding 4 MB | 30.789 ms<br>51.6 MB/call | **14.465 ms**<br>**4.1 MB/call** | **2.13x**<br>**-92%** |
+| findOne with a 100k int4[] - 1 entity holding 1 array of 100 000 values | 22.628 ms<br>22.3 MB/call | **6.017 ms**<br>**2.2 MB/call** | **3.76x**<br>**-90%** |
+| save one entity - 1 entity of 1 assigned column | 0.642 ms<br>**79 KB/call** | **0.582 ms**<br>97 KB/call | **1.10x**<br>+23% |
 
 ## Reading them
 
-**Large payloads are where it wins, and it wins them twice.** **int4[] of 100k** 3.87x, **float8 packed in one row** 3.74x, **findOne with a 100k int4[]** 3.70x, **bytea of 4 MB** 2.28x, **findOne with a 4 MB bytea** 2.24x on the clock; on
-allocation, **float8 packed in one row** 209 KB/call against 2.8 MB, **bytea of 4 MB** 4.1 MB/call against 51.5 MB, **findOne with a 4 MB bytea** 4.2 MB/call against 51.7 MB, **findOne with a 100k int4[]** 2.2 MB/call against 23.4 MB, **int4[] of 100k** 2.2 MB/call against 22.8 MB. Those columns arrive in PostgreSQL's binary format rather than as text to be
+**Large payloads are where it wins, and it wins them twice.** **int4[] of 100k** 3.93x, **findOne with a 100k int4[]** 3.76x, **float8 packed in one row** 3.70x, **bytea of 4 MB** 2.24x, **findOne with a 4 MB bytea** 2.13x on the clock; on
+allocation, **float8 packed in one row** 213 KB/call against 2.7 MB, **bytea of 4 MB** 4.0 MB/call against 51.4 MB, **findOne with a 4 MB bytea** 4.1 MB/call against 51.6 MB, **int4[] of 100k** 2.2 MB/call against 22.7 MB, **findOne with a 100k int4[]** 2.2 MB/call against 22.3 MB. Those columns arrive in PostgreSQL's binary format rather than as text to be
 parsed, and the parse is most of what that saves - `pg` has to materialise the whole value as a
 string first.
 
 **What decides it is values per row, not values.** `float8 spread over rows` and `float8 packed in one row` hold the
-same 5000 `float8`s and differ in nothing but shape. Spread over rows the two are close, 1.73x on the
-clock and -23% on allocation, because the protocol's per-row cost is most of what either client
-pays. Packed into one row it is 3.74x and -93% - and `pg` gets worse rather than this
+same 5000 `float8`s and differ in nothing but shape. Spread over rows the two are close, 1.44x on the
+clock and -24% on allocation, because the protocol's per-row cost is most of what either client
+pays. Packed into one row it is 3.70x and -92% - and `pg` gets worse rather than this
 client getting better, because one row of 5000 values is one long array literal with a substring cut
 per element.
 
 **Entity hydration dilutes the ordinary gain and not the payload one**, which is the reason both
-levels are here. `findOne` on a row holding 4 MB reads 16.425 ms against 36.747 ms and 4.2 MB
-against 51.7 MB - within a few percent of the same read through `query()`, because what TypeORM
+levels are here. `findOne` on a row holding 4 MB reads 14.465 ms against 30.789 ms and 4.1 MB
+against 51.6 MB - within a few percent of the same read through `query()`, because what TypeORM
 adds is per entity and the payload is one. On a shape of many small entities it is the layer above
 that decides the ratio.
 
-**It allocates more per call on small ones**: **twenty inserts in a transaction** 271 KB against 162 KB, **insert one row** 14 KB against 9 KB, **save one entity** 98 KB against 79 KB, **insert 500 rows** 1.0 MB against 948 KB, **findOneBy** 69 KB against 64 KB, **point read** 18 KB against 17 KB, **box of 5k rows** 2.0 MB against 1.9 MB, **write a 100k int4[]** 28.0 MB against 27.2 MB. A higher fixed cost per call and a much
+**It allocates more per call on small ones**: **twenty inserts in a transaction** 266 KB against 164 KB, **insert one row** 14 KB against 9 KB, **save one entity** 97 KB against 79 KB, **insert 500 rows** 1.0 MB against 948 KB, **findOneBy** 68 KB against 64 KB, **point read** 18 KB against 17 KB, **box of 5k rows** 2.0 MB against 1.9 MB, **write a 100k int4[]** 27.5 MB against 27.2 MB. A higher fixed cost per call and a much
 lower marginal cost per byte is the shape of it, and that first part is charged **per statement**
 rather than per byte - which is worth knowing before reading a percentage off that list. Swept
 across insert
@@ -148,7 +154,7 @@ attributed rather than guessed at. Same alternation, same sign test.
 
 | mechanism | without | with | |
 | --- | --- | --- | --- |
-| prepared statements - the same parameterized read, against `prepare: false` | 0.297 ms | **0.255 ms** | **1.16x**<br>391/401 |
+| prepared statements - the same parameterized read, against `prepare: false` | 0.288 ms | **0.250 ms** | **1.16x**<br>394/401 |
 
 The wire format is the other one, and it is not isolated by turning something off - it is the
 float8 pair above. That pair is why this section can say anything at all: measured only on
@@ -165,24 +171,24 @@ shortly after they stop; one figure cannot say both, so both are here.
 
 | Scenario | `pg` | `typeorm-postgrejs` |
 | --- | --- | --- |
-| point read | 448 KB | 644 KB |
-| page of 100 | 560 KB | 771 KB |
-| all 5000 rows | 3.2 MB | 2.8 MB → 703 KB idle |
-| float8 spread over rows | 833 KB | 921 KB → 644 KB idle |
-| float8 packed in one row | 502 KB | 621 KB |
-| int4[] of 100k | ≈0 | 1.4 MB → 584 KB idle |
+| point read | 448 KB | 640 KB |
+| page of 100 | 552 KB | 775 KB |
+| all 5000 rows | 3.2 MB | 2.8 MB → 705 KB idle |
+| float8 spread over rows | 832 KB | 952 KB → 649 KB idle |
+| float8 packed in one row | 470 KB | 625 KB |
+| int4[] of 100k | ≈0 | 1.4 MB → 587 KB idle |
 | bytea of 4 MB | 3.1 MB | 3.2 MB → ≈0 idle |
-| uuid of 5k rows | 1.0 MB | 1.2 MB → 663 KB idle |
-| box of 5k rows | 1.2 MB | 1.4 MB → 680 KB idle |
-| insert one row | 346 KB | 545 KB |
-| insert 500 rows | 414 KB | 719 KB |
-| write a 100k int4[] | 348 KB | 1.7 MB → 521 KB idle |
-| twenty inserts in a transaction | 467 KB | 678 KB |
+| uuid of 5k rows | 1.0 MB | 1.1 MB → 655 KB idle |
+| box of 5k rows | 1.3 MB | 1.4 MB → 694 KB idle |
+| insert one row | 346 KB | 543 KB |
+| insert 500 rows | 414 KB | 752 KB |
+| write a 100k int4[] | 348 KB | 1.7 MB → 522 KB idle |
+| twenty inserts in a transaction | 467 KB | 679 KB |
 | concurrent reads | 2.5 MB | 2.1 MB → 1.2 MB idle |
 | findOneBy | 1.2 MB | 1.4 MB |
 | find 100 entities | 1.2 MB | 1.7 MB |
 | find 5000 entities | 3.9 MB | 3.6 MB → 1.4 MB idle |
 | queryBuilder, 500 entities | 1.5 MB | 1.7 MB |
 | findOne with a 4 MB bytea | 3.7 MB | 3.9 MB → ≈0 idle |
-| findOne with a 100k int4[] | 656 KB | 2.1 MB → 1.3 MB idle |
-| save one entity | 1.3 MB | 1.5 MB |
+| findOne with a 100k int4[] | 628 KB | 2.1 MB → 1.3 MB idle |
+| save one entity | 1.3 MB | 1.6 MB |

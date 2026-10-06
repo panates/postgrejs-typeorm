@@ -430,6 +430,33 @@ for (const p of ['pg', 'postgrejs', 'typeorm'])
       fs.readFile(`node_modules/${p}/package.json`, 'utf8'),
     ),
   ).version;
+
+/**
+ * **Whether the PostgreJS in `node_modules` is the one npm put there.**
+ *
+ * This package is developed against the build in the next directory rather
+ * than against a release - PostgreJS ships before it does, so an unreleased
+ * fix is a scheduling detail - and that build is copied over the installed
+ * one by hand. Its `package.json` carries whatever version the last release
+ * stamped, so a figure measured on four unreleased commits would be
+ * published under the version before them.
+ *
+ * The lockfile knows what was installed, so the disagreement is the signal.
+ * No disagreement, no claim: a dev build that happens to carry the same
+ * version string reads as a release, which is the one case this cannot
+ * catch and is why the field says "unverified" rather than "release".
+ */
+{
+  const fs = await import('node:fs/promises');
+  const lock = JSON.parse(await fs.readFile('package-lock.json', 'utf8'));
+  const locked = (lock.packages ?? {})['node_modules/postgrejs']?.version;
+  results.versions.postgrejsSource =
+    locked === undefined
+      ? 'unverified (not in the lockfile)'
+      : locked === results.versions.postgrejs
+        ? `npm (${locked})`
+        : `a build put into node_modules by hand, where the lockfile installed ${locked}`;
+}
 {
   const pool = new (await import('pg')).Pool(CONN);
   results.versions.postgresql = (

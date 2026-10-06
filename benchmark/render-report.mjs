@@ -147,7 +147,11 @@ Generated from \`benchmark/results/latest.json\` by \`benchmark/render-report.mj
 \`node benchmark/bench.mjs\`; nothing here is written by hand.
 
 Node ${r.node}, \`postgrejs\` ${r.versions.postgrejs}, \`pg\` ${r.versions.pg}, \`typeorm\` ${r.versions.typeorm},
-PostgreSQL ${r.versions.postgresql} on loopback. Prepared statements: ${r.prepare}.
+PostgreSQL ${r.versions.postgresql} on loopback. Prepared statements: ${r.prepare}.${
+  r.versions.postgrejsSource && !r.versions.postgrejsSource.startsWith('npm')
+    ? `\n\n> **The PostgreJS measured here is not a published build** - it is ${r.versions.postgrejsSource}.\n> This package is developed against the build in the next directory, because PostgreJS releases\n> before it does and an unreleased fix is a scheduling detail, so these figures lead the registry\n> rather than describing it. Installing ${r.versions.postgrejs} will not reproduce them.\n> Re-measure before release.`
+    : ''
+}
 PostgreJS's \`asyncErrorHandling\` is **${r.asyncErrorHandling === false ? 'off' : 'on'}** here: it
 captures a caller-preserving async stack on every call and \`pg\` has nothing equivalent, so
 leaving it on would charge one client for a feature the comparison does not cover. Measured, it is
@@ -330,7 +334,19 @@ const headline = [
   .map(n => rows.find(s => s.name === n))
   .filter(Boolean);
 
-const env = `TypeORM ${r.versions.typeorm}, \`pg\` ${r.versions.pg}, PostgreJS ${r.versions.postgrejs}, PostgreSQL ${r.versions.postgresql}, loopback, Node ${r.node.replace('v', '')}. Medians per call, and allocation per call. How that was measured and how far each row can be trusted are in [How the numbers were measured](#how-the-numbers-were-measured); the full set is in [\`doc/BENCHMARKS.md\`](doc/BENCHMARKS.md).`;
+/**
+ * The PostgreJS version as a reader should see it. A hand-placed build is
+ * said so wherever the version appears, not only in the methodology note:
+ * the number in `package.json` is the release before the commits being
+ * measured, so printing it bare sends a reader to a registry build that
+ * does not produce these figures.
+ */
+const pgjs =
+  r.versions.postgrejsSource && !r.versions.postgrejsSource.startsWith('npm')
+    ? `${r.versions.postgrejs}+unreleased`
+    : r.versions.postgrejs;
+
+const env = `TypeORM ${r.versions.typeorm}, \`pg\` ${r.versions.pg}, PostgreJS ${pgjs}, PostgreSQL ${r.versions.postgresql}, loopback, Node ${r.node.replace('v', '')}. Medians per call, and allocation per call. How that was measured and how far each row can be trusted are in [How the numbers were measured](#how-the-numbers-were-measured); the full set is in [\`doc/BENCHMARKS.md\`](doc/BENCHMARKS.md).`;
 
 const big = payloads[0];
 const bytea = rows.find(s => s.name === 'bytea of 4 MB');
