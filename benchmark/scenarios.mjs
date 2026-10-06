@@ -150,9 +150,11 @@ export const DDL = [
   `drop table if exists ${SCHEMA}.floats`,
   `create table ${SCHEMA}.floats as
      select (random() * 1e9)::float8 as v from generate_series(1, 5000) i`,
+  `alter table ${SCHEMA}.floats add column id serial primary key`,
   `drop table if exists ${SCHEMA}.float_array`,
   `create table ${SCHEMA}.float_array as
      select array_agg(v) as v from ${SCHEMA}.floats`,
+  `alter table ${SCHEMA}.float_array add column id serial primary key`,
 
   // Two scalar types that disagree about what binary is worth, 5000 rows
   // each. `uuid` is sixteen bytes against thirty-six characters, so binary
@@ -167,17 +169,20 @@ export const DDL = [
   `drop table if exists ${SCHEMA}.uuids`,
   `create table ${SCHEMA}.uuids as
      select gen_random_uuid() as v from generate_series(1, 5000) i`,
+  `alter table ${SCHEMA}.uuids add column id serial primary key`,
   `drop table if exists ${SCHEMA}.boxes`,
   `create table ${SCHEMA}.boxes as
      select box(point(random() * 1e6, random() * 1e6),
                 point(random() * 1e6, random() * 1e6)) as v
      from generate_series(1, 5000) i`,
+  `alter table ${SCHEMA}.boxes add column id serial primary key`,
 
   // A 100k int4[] in one row. `pg` reads it as text and has to materialise
   // the whole array literal as one string before it can parse it.
   `drop table if exists ${SCHEMA}.arrays`,
   `create table ${SCHEMA}.arrays as
      select array(select 2147383646 + i from generate_series(1, 100000) i) as v`,
+  `alter table ${SCHEMA}.arrays add column id serial primary key`,
 
   // One bytea, large. `pg` returns bytea as hex text - twice the size, and
   // off the JS heap, where a `heapUsed` figure alone cannot see it.
@@ -272,6 +277,56 @@ export const Payload = new EntitySchema({
   },
 });
 
+/**
+ * The four the ORM level needed an entity over, so that every shape the raw
+ * level measures has a counterpart one layer up. The columns are the ones
+ * the raw scenarios already select; the key was added to the seed for these.
+ *
+ * `box` is declared `text` on purpose and that is not a shortcut: this
+ * facade asks for the geometric family as text because `pg` returns strings
+ * for it, so a string is what both clients hand TypeORM and what TypeORM
+ * would hydrate either way.
+ */
+export const Float = new EntitySchema({
+  name: 'BenchFloat',
+  tableName: 'floats',
+  schema: SCHEMA,
+  columns: {
+    id: { type: 'int', primary: true, generated: 'increment' },
+    v: { type: 'float8' },
+  },
+});
+
+export const FloatArray = new EntitySchema({
+  name: 'BenchFloatArray',
+  tableName: 'float_array',
+  schema: SCHEMA,
+  columns: {
+    id: { type: 'int', primary: true, generated: 'increment' },
+    v: { type: 'float8', array: true },
+  },
+});
+
+export const Uuid = new EntitySchema({
+  name: 'BenchUuid',
+  tableName: 'uuids',
+  schema: SCHEMA,
+  columns: {
+    id: { type: 'int', primary: true, generated: 'increment' },
+    v: { type: 'uuid' },
+  },
+});
+
+export const Box = new EntitySchema({
+  name: 'BenchBox',
+  tableName: 'boxes',
+  schema: SCHEMA,
+  columns: {
+    id: { type: 'int', primary: true, generated: 'increment' },
+    v: { type: 'text' },
+  },
+});
+
 /** Where every ORM write goes, so no read scenario can see it grow. */
 export const Write = new EntitySchema({
   name: 'BenchWrite',
@@ -289,6 +344,7 @@ export const Write = new EntitySchema({
     meta: { type: 'jsonb', nullable: true },
     ref: { type: 'uuid', nullable: true },
     blob: { type: 'bytea', nullable: true },
+    numbers: { type: 'int', array: true, nullable: true },
   },
 });
 
@@ -361,7 +417,7 @@ export function openDatabases(pooled = false, level = 'raw', only) {
       ...CONN,
       username: CONN.user,
       driver,
-      entities: [Row, Write, Payload],
+      entities: [Row, Write, Payload, Float, FloatArray, Uuid, Box],
       // `extra` is what TypeORM merges into the object it hands `new
       // Pool(...)`, so it is the same channel a consumer would use. Only
       // the facade gets it - `pg` has no such setting to turn off.
@@ -837,6 +893,168 @@ export const SCENARIOS = [
       ds.getRepository('BenchPayload').findOne({
         where: { id: 1 + (i % 1) },
         select: { id: true, numbers: true },
+      }),
+  },
+  {
+    /* The ORM counterpart of `float8 spread over rows` - 5000 entities of
+     * one float8, where the per-row cost is most of what either client
+     * pays. */
+    name: 'find 5000 floats',
+    group: 'Read',
+    level: 'orm',
+    note: '5000 entities of 1 float8',
+    iters: 5,
+    pairs: 61,
+    run: ds => ds.getRepository('BenchFloat').find({ select: { v: true } }),
+  },
+  {
+    /* And of `float8 packed in one row` - the same 5000 values as one
+     * array, which is where `pg` has to cut a substring per element. */
+    name: 'findOne a 5000-float array',
+    group: 'Read',
+    level: 'orm',
+    note: '1 entity holding 1 array of 5000 float8',
+    iters: 5,
+    pairs: 61,
+    run: (ds, i) =>
+      ds
+        .getRepository('BenchFloatArray')
+        .findOne({ where: { id: 1 + (i % 1) }, select: { id: true, v: true } }),
+  },
+  {
+    /* `uuid of 5k rows`, one layer up: sixteen bytes against thirty-six
+     * characters, so this is where binary is shorter. */
+    name: 'find 5000 uuids',
+    group: 'Read',
+    level: 'orm',
+    note: '5000 entities of 1 uuid',
+    iters: 5,
+    pairs: 61,
+    run: ds => ds.getRepository('BenchUuid').find({ select: { v: true } }),
+  },
+  {
+    /* `box of 5k rows`, one layer up. Asked for as text on both sides, so
+     * what is compared is the row machinery rather than a decoder. */
+    name: 'find 5000 boxes',
+    group: 'Read',
+    level: 'orm',
+    note: '5000 entities of 1 box, asked for as text on both sides',
+    iters: 5,
+    pairs: 61,
+    run: ds => ds.getRepository('BenchBox').find({ select: { v: true } }),
+  },
+  {
+    /**
+     * `concurrent reads`, one layer up and the shape a web application
+     * actually has: twenty requests at once, each fetching a page. In
+     * TypeORM that is twenty `QueryRunner`s and so twenty checkouts, which
+     * is why this is the one ORM scenario that keeps the pool.
+     */
+    name: 'concurrent finds',
+    group: 'Read',
+    level: 'orm',
+    note: '20 finds at once of 100 entities each, pool of 10',
+    iters: 2,
+    pairs: 61,
+    pooled: true,
+    run: (ds, i) =>
+      Promise.all(
+        Array.from({ length: 20 }, (_, k) =>
+          ds.getRepository('BenchRow').find({
+            order: { id: 'ASC' },
+            skip: ((i * 20 + k) % 40) * 100,
+            take: 100,
+          }),
+        ),
+      ),
+  },
+  {
+    /* `insert 500 rows`, one layer up. `insert()` rather than `save()`:
+     * `save` would load each entity first, which measures the read path. */
+    name: 'insert 500 entities',
+    group: 'Write',
+    level: 'orm',
+    note: '500 entities of 9 mixed columns in 1 statement',
+    iters: 5,
+    pairs: 61,
+    run: (ds, i) =>
+      ds.getRepository('BenchWrite').insert(
+        Array.from({ length: 500 }, (_, k) => {
+          const [
+            name,
+            email,
+            age,
+            balance,
+            tags,
+            created_at,
+            active,
+            meta,
+            ref,
+          ] = writeRow(i * 500 + k);
+          return {
+            name,
+            email,
+            age,
+            balance,
+            tags,
+            created_at,
+            active,
+            meta,
+            ref,
+          };
+        }),
+      ),
+  },
+  {
+    /* `write a 100k int4[]`, one layer up - the send side of
+     * `findOne with a 100k int4[]`. */
+    name: 'save a 100k int4[]',
+    group: 'Write',
+    level: 'orm',
+    note: '1 entity holding 1 array of 100 000 values',
+    iters: 3,
+    pairs: 41,
+    run: (ds, i) =>
+      ds.getRepository('BenchWrite').insert({
+        name: `arr${i}`,
+        numbers: ARRAY_100K,
+      }),
+  },
+  {
+    /* `twenty inserts in a transaction`, one layer up: TypeORM's own
+     * transaction, which checks a connection out and holds it. */
+    name: 'twenty saves in a transaction',
+    group: 'Write',
+    level: 'orm',
+    note: '20 entities of 9 mixed columns, one statement each, in one transaction',
+    iters: 3,
+    pairs: 61,
+    run: (ds, i) =>
+      ds.transaction(async manager => {
+        for (let k = 0; k < 20; k++) {
+          const [
+            name,
+            email,
+            age,
+            balance,
+            tags,
+            created_at,
+            active,
+            meta,
+            ref,
+          ] = writeRow(i * 20 + k);
+          await manager.getRepository('BenchWrite').insert({
+            name,
+            email,
+            age,
+            balance,
+            tags,
+            created_at,
+            active,
+            meta,
+            ref,
+          });
+        }
       }),
   },
   {

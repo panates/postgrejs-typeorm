@@ -215,14 +215,23 @@ either a read or a write, and runs either on a bare connection or through a Type
 | reading | ${rowCount(pick('Read', 'raw'))} | ${rowCount(pick('Read', 'orm'))} |
 | writing | ${rowCount(pick('Write', 'raw'))} | ${rowCount(pick('Write', 'orm'))} |
 
-The level is the axis that matters - entity hydration sits on top of everything and dilutes any
-gain, so the same work at both levels is two different answers and neither substitutes for the
-other. The read/write split is a subdivision inside it.
+**The right-hand column is the one to read**, and it is the reason this file exists rather than
+PostgreJS's own benchmark. A reader of this package runs TypeORM; what they get is the right-hand
+column, hydration included. Every shape in the left-hand column has a counterpart in the right-hand
+one so that the two can be compared directly.
 
-The third table below is **not a third kind of workload**: it is the right-hand column, both rows
-of it, left together because splitting it would leave a table of
-${pick('Write', 'orm').length}. So \`save one entity\` there is a write and belongs beside
-\`insert one row\` above, not opposite it.
+The left-hand column is kept for attribution rather than as a headline: entity hydration sits on
+top of everything and dilutes any gain, so a row that moves at both levels is the client's and a
+row that moves only at one is the layer above it. Neither answer substitutes for the other, and
+without the raw level there is no way to tell which of the two a number belongs to.
+
+### Through TypeORM, reading
+
+${table(pick('Read', 'orm'))}
+
+### Through TypeORM, writing
+
+${table(pick('Write', 'orm'))}
 
 ### Reading, without the ORM
 
@@ -231,10 +240,6 @@ ${table(pick('Read', 'raw'))}
 ### Writing, without the ORM
 
 ${table(pick('Write', 'raw'))}
-
-### Through TypeORM, reading and writing
-
-${table([...pick('Read', 'orm'), ...pick('Write', 'orm')])}
 
 ## Reading them
 
