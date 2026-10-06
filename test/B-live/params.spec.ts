@@ -146,10 +146,13 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
    * type (`src/params.ts`), so the database answers for the value the caller
    * passed rather than for the text `pg` would have sent instead.
    *
-   * `pg` declares no type for any parameter, which is the only way it has of
-   * letting the server resolve one from context. A parameter with no context
-   * is where that technique runs out: it gets its own text back, and it
-   * cannot multiply at all.
+   * The two are not the same kind of difference. `select $1` has nothing to
+   * resolve from, so an undeclared parameter stays `text` and `pg` hands
+   * back the string it sent. `select $1 * 2` has plenty - the server
+   * resolves `$1` to `integer` from the `* 2` on its own, which is why
+   * `pg`'s `22P02` is correct and the same statement with `2` returns `4`
+   * under it. Declaring `numeric` does not recover something `pg` lost; it
+   * makes the multiplication a `numeric` one.
    *
    * Both sides are pinned rather than the case skipped - a change on either
    * one fails here, so this records a decision instead of excusing a
