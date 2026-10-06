@@ -234,17 +234,31 @@ adds is per entity and the payload is one. On a shape of many small entities it 
 that decides the ratio.
 
 **It allocates more per call on small ones**: ${memLosses}. A higher fixed cost per call and a much
-lower marginal cost per byte is the shape of it, and the fixed part is a constant rather than a
-rate - which is worth knowing before reading a percentage off that list. Swept across insert shapes
-it stays near 7 KB a statement while the denominator moves: no parameters +134%, one +90%, one with
-\`returning id\` +68%, five +74%, five returning the row +28%, ten rows of five +57%. Only the
-denominator is changing.
+lower marginal cost per byte is the shape of it, and that first part is charged **per statement**
+rather than per byte - which is worth knowing before reading a percentage off that list. Swept
+across insert
+shapes, the **gap** moves between about 4 and 8 KB a statement while the **percentage** moves by a
+factor of nine:
 
-Most of that 7 KB is not this package. The same one-parameter statement, one client per process,
-medians of three: \`pg\` 8.96 KB a call, PostgreJS with nothing on it 13.24, this facade 15.01 - so
-about 4.3 KB is the client underneath and 1.8 KB is what the facade adds. The larger half is
+\`\`\`
+                                  pg      here      gap
+  1 parameter                   8.2      13.8      5.6      +68%
+  1 parameter, returning id    10.3      14.1      3.8      +37%
+  5 parameters                  9.0      15.4      6.5      +72%
+  5 parameters, returning *    17.0      18.4      1.4       +8%
+  10 rows of 5                 23.2      31.3      8.1      +35%
+\`\`\`
+
+Nothing about either client changes across those five; the denominator does. A row that asks for
+one small statement is near the top of that range by construction, and the three rows above are
+the three smallest statements in the set.
+
+Most of the gap is not this package. The same one-parameter statement, one client per process,
+medians of three: \`pg\` 8.4 KB a call, PostgreJS with nothing on it 12.9, this facade 14.2 - so
+about 4.5 KB is the client underneath and 1.4 KB is what the facade adds. The larger share is
 reported upstream rather than worked around here, which is this package's rule for anything that
-belongs to the client.
+belongs to the client, and \`flexy-buffer@1.1.2\` in PostgreJS 3.12.2 is the first instalment
+coming back: it took two \`setTimeout\`s a query out of the send buffer.
 
 ## Where it comes from
 

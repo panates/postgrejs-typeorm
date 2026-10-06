@@ -543,36 +543,40 @@ export const SCENARIOS = [
      * payload; this one is about what a statement costs before the payload.
      *
      * Which is why its percentage must not be read as a fact about writing.
-     * Swept, the *gap* barely moves while the denominator does - per call,
-     * `pg` against this facade:
+     * Swept on PostgreJS 3.12.2, per call, `pg` against this facade:
      *
      * ```
-     *   no parameters, nothing returned     6.2  ->  14.6   +134%
-     *   1 parameter                         8.1  ->  15.4    +90%
-     *   1 parameter, returning id          10.3  ->  17.4    +68%
-     *   5 parameters                       10.2  ->  17.7    +74%
-     *   5 parameters, returning *          16.4  ->  21.0    +28%
-     *   10 rows, 50 parameters             23.2  ->  36.4    +57%
+     *                                 pg     here     gap
+     *   1 parameter                  8.2     13.8     5.6     +68%
+     *   1 parameter, returning id   10.3     14.1     3.8     +37%
+     *   5 parameters                 9.0     15.4     6.5     +72%
+     *   5 parameters, returning *   17.0     18.4     1.4      +8%
+     *   10 rows of 5                23.2     31.3     8.1     +35%
      * ```
      *
-     * A flat 7 KB or so a statement, across a 4x range of shapes. The
-     * published percentage is that constant over whichever denominator the
-     * scenario chose, and this one chose nearly the smallest there is.
+     * The gap moves between about 4 and 8 KB; the percentage moves by a
+     * factor of nine. Nothing about either client changes across those
+     * five - the denominator does, and this scenario picked nearly the
+     * smallest denominator available.
      *
-     * **And the 7 KB is mostly not this facade's.** The same statement with
-     * one parameter, one client per process, medians of three:
-     * `pg` 8.96 KB a call, PostgreJS with nothing on it 13.24, this facade
-     * 15.01. So ~4.3 KB of the gap is the client underneath and ~1.8 KB is
-     * what the facade adds on top. Reported upstream as
+     * (A no-parameter variant reads +150%, and is left out of that table
+     * on purpose: with no parameter `pg` sends a simple Query while
+     * PostgreJS still runs Parse/Bind/Describe/Execute/Sync, so the two are
+     * not on the same protocol and the figure means nothing.)
+     *
+     * **And the gap is mostly not this facade's.** The same statement with
+     * one parameter, one client per process, medians of three: `pg` 8.4 KB
+     * a call, PostgreJS with nothing on it 12.9, this facade 14.2. So about
+     * 4.5 KB is the client underneath and 1.4 KB is what the facade adds.
+     * Reported upstream as
      * `../postgrejs/.claude/a-fixed-cost-per-statement.md` rather than
-     * hidden behind a larger denominator. (The parameter is not decoration:
-     * with none, `pg` sends a simple Query and PostgreJS still runs
-     * Parse/Bind/Describe/Execute/Sync, and the two are not on the same
-     * protocol.)
+     * hidden behind a larger denominator, and `flexy-buffer@1.1.2` in
+     * PostgreJS 3.12.2 is the first part of it coming back - two
+     * `setTimeout`s a query out of the send buffer.
      *
      * It keeps no RETURNING, unlike `save one entity`, which TypeORM sends
      * as `INSERT ... RETURNING "id"`. That is deliberate here: adding one
-     * would move this row from +90% to +68% by giving the decoder something
+     * would move this row from +68% to +37% by giving the decoder something
      * to do, and a floor that has been softened is not a floor. The ORM
      * level is where the consumer's actual insert is measured.
      */
