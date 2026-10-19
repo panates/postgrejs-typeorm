@@ -275,6 +275,10 @@ input parsing for text, assignment cast for a typed value:
   insert into t (q bigint)      with 2.7    pg  22P02         declared  writes 3
 ```
 
+The middle one is the weakest of the three and is here for completeness: the server resolves `$1`
+to `integer` from the `* 2` by itself, so `pg`'s error is correct and declaring `numeric` changes
+the expression rather than fixing it. See §5.7.
+
 The last one is the argument. `insert into t (q) values (2.7)` in plain SQL writes **3** - assigning
 a numeric value to an integer column is an assignment cast and those round. `pg`'s `22P02` is what
 PostgreSQL does with the *string* `'2.7'`, which is a consequence of the only technique `pg` has for
@@ -359,18 +363,33 @@ answer is right for the value the caller passed, which is §5.3.
 
 ### 5.7 The pinned divergences
 
-`pg` is the oracle for every parameter shape except two, and in both `pg` is the one losing
-information. They are pinned on *both* sides in `test/B-live/params.spec.ts` - a change on either
-fails - rather than skipped:
+`pg` is the oracle for every parameter shape except two. They are pinned on *both* sides in
+`test/B-live/params.spec.ts` - a change on either fails - rather than skipped:
 
 | | `pg` | here |
 | --- | --- | --- |
 | `select $1` with `12` | `'12'` (string) | `12` (number) |
 | `select $1 * 2` with `1.5` | `22P02` | `'3.0'` |
 
-A parameter with nothing around it to resolve from is the only place this shows. Everywhere else -
-a column, a comparison, a function argument - the context decides and both land on the same value,
-which is why the rest of the matrix and the differential suite are untouched by it.
+**They are not the same kind of difference, and only the first is `pg` losing anything.**
+
+In `select $1` there is nothing to resolve the parameter from, so an undeclared one stays `text`
+and `pg` hands back the string it sent. Declaring gives the caller their value back.
+
+`select $1 * 2` is the opposite: there is plenty of context and the server uses it. The chain is
+
+1. `pg` declares no type, so the server resolves `$1` from the expression alone -
+   `prepare p as select $1 * 2` answers **`integer`** with no client involved, because `2` is an
+   `int4`;
+2. `pg` sends the value as **text**, which is how "declare nothing" is implemented;
+3. the server has to read `'1.5'` as an `integer`, and `22P02 invalid input syntax for type
+   integer: "1.5"` is the right answer to that.
+
+The same statement with `2` returns `4` under `pg` perfectly well. So the error is the transport
+meeting a resolution that was already correct, not a failure to resolve. What this package does is
+not recover information `pg` lost; it **changes what the expression resolves to**, by declaring
+`numeric` so the multiplication is a `numeric` one. That is §5.3's result-column mechanism seen from
+the other side, and it is a choice rather than a correction.
 
 ### 5.8 The two PostgreJS defects this turned up - both since fixed
 

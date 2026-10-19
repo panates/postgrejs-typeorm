@@ -185,14 +185,25 @@ EOF
 
 # ------------------------------------------------------------ install, build
 
+# `corepack pnpm`, never a bare `pnpm`: a GitHub runner has neither pnpm on
+# PATH nor corepack's shims enabled, and both scheduled runs of
+# .github/workflows/typeorm-suite.yml died on `pnpm: command not found`
+# before their first test. corepack ships with Node, needs no `enable`, and
+# resolves the version out of TypeORM's own `packageManager` field - 10.34.4
+# in both ends of the matrix - so CI and a developer's machine run the same
+# pnpm whatever happens to be installed there. That is also what satisfies
+# TypeORM's `devEngines` block, which is `onFail: error` and which `npx pnpm`
+# trips. corepack's signature check fails on current Node, so the download is
+# allowed through instead of being worked around.
+PNPM=(corepack pnpm)
+command -v corepack >/dev/null 2>&1 || PNPM=(pnpm)
+export COREPACK_INTEGRITY_KEYS=0
+
 if [ -z "${SKIP_BUILD:-}" ]; then
   say "Installing and compiling TypeORM (slow, once per checkout)"
-  # corepack's signature check fails on current Node, and npx pnpm trips
-  # TypeORM's own devEngines block - so the download is allowed through
-  # instead of being worked around.
-  (cd "$SRC_DIR" && COREPACK_INTEGRITY_KEYS=0 pnpm install --ignore-scripts) ||
+  (cd "$SRC_DIR" && "${PNPM[@]}" install --ignore-scripts) ||
     die "pnpm install failed"
-  (cd "$SRC_DIR" && COREPACK_INTEGRITY_KEYS=0 pnpm run compile) ||
+  (cd "$SRC_DIR" && "${PNPM[@]}" run compile) ||
     die "typeorm did not compile"
 fi
 [ -d "$SRC_DIR/build/compiled/test" ] ||

@@ -86,6 +86,19 @@ const CASES: [string, string, any[]][] = [
   ['bare parameter, string', 'select $1 v', ['abc']],
   ['bare parameter, null', 'select $1 v', [null]],
   ['arithmetic on an undeclared parameter', 'select $1 * 2 v', [1.5]],
+  /**
+   * **The one that does not raise anything.** `round($1)` resolves `$1` to
+   * `double precision` when nothing declares it, and `round(float8)` is
+   * banker's rounding - `round(2.5)` is 2, `round(0.5)` is 0. Declared
+   * `numeric` it is round-half-away-from-zero: 3 and 1.
+   *
+   * Neither is wrong and both are PostgreSQL's own, but the difference is
+   * silent and lands on money. A JS number *is* a double, so `pg`'s answer
+   * is arguably the more faithful reading of the value; ours is the more
+   * faithful reading of what the caller probably meant. Pinned so that it
+   * is a recorded decision rather than something a user finds in a total.
+   */
+  ['round of a half', 'select round($1) v', [2.5]],
   ['arithmetic on an undeclared integer', 'select $1 + 1 v', [12]],
 ];
 
@@ -146,10 +159,18 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
    * type (`src/params.ts`), so the database answers for the value the caller
    * passed rather than for the text `pg` would have sent instead.
    *
-   * `pg` declares no type for any parameter, which is the only way it has of
-   * letting the server resolve one from context. A parameter with no context
-   * is where that technique runs out: it gets its own text back, and it
-   * cannot multiply at all.
+   * The two are not the same kind of difference. `select $1` has nothing to
+   * resolve from, so an undeclared parameter stays `text` and `pg` hands
+   * back the string it sent - that one is `pg` returning less than it was
+   * given.
+   *
+   * `select $1 * 2` has plenty of context and the server uses it: `prepare
+   * p as select $1 * 2` answers `integer` with no client involved, because
+   * `2` is an `int4`. `pg` then sends the value as **text**, which is how
+   * declaring nothing is implemented, so `'1.5'` has to be read as an
+   * integer and `22P02` is the right answer to that. The same statement
+   * with `2` returns `4` under `pg`. Declaring `numeric` here does not
+   * recover anything - it changes what the expression resolves to.
    *
    * Both sides are pinned rather than the case skipped - a change on either
    * one fails here, so this records a decision instead of excusing a
@@ -161,6 +182,8 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
       pg: 'err:22P02',
       ours: 'ok:string:3.0',
     },
+    // float8 rounds half to even, numeric rounds half away from zero.
+    'round of a half': { pg: 'ok:number:2', ours: 'ok:string:3' },
   };
 
   for (const [label, sql, values] of CASES) {
@@ -183,7 +206,7 @@ describe('B-live: parameters go on the wire the way pg puts them there', () => {
     const labels = new Set(CASES.map(([l]) => l));
     for (const key of Object.keys(INTENDED))
       assert.ok(labels.has(key), `INTENDED names a case not run: ${key}`);
-    assert.strictEqual(Object.keys(INTENDED).length, 2);
+    assert.strictEqual(Object.keys(INTENDED).length, 3);
   });
 
   /**
