@@ -1,6 +1,27 @@
 # Changelog
 
-<!-- rman:documented-up-to 2de6ad1bad543744a6289ec1b60159a08031c4c4 -->
+<!-- rman:documented-up-to d98e8d04f77e66ab8a9d54275ae81858ceb6f8aa -->
+
+## v2.0.1 (2026-10-19)
+
+### 🐛 Bug Fixes
+
+- **ci:** run pnpm through corepack, not off PATH (7fb8b37)
+
+### 📚 Documentation
+
+- $1 * 2 is not pg losing information (854de49)
+
+### 🧪 Tests
+
+- **params:** name the text transport in the $1 * 2 note (59b7323)
+- **params:** pin round($1), which differs silently (6e12ed9)
+
+### 🧹 Chores
+
+- sync lockfile (d0f418c)
+
+---
 
 ## v2.0.0 (2026-10-06)
 
