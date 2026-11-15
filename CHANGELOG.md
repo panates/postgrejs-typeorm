@@ -1,6 +1,16 @@
 # Changelog
 
-<!-- rman:documented-up-to d98e8d04f77e66ab8a9d54275ae81858ceb6f8aa -->
+<!-- rman:documented-up-to efe326c1a48b978d5207c4ae9d352821624aa0d6 -->
+
+## v2.0.2 (2026-11-15)
+
+### 🧹 Chores
+
+- sync lockfile (0e2d1ae)
+- **deps:** upgrade dependencies (81044bc)
+- normalize repository.url for rman 2.42's check (9fff706)
+
+---
 
 ## v2.0.1 (2026-10-19)
 
