@@ -213,8 +213,8 @@ doing that job either. The sign test is the guard instead, and it is the per-row
 same check.
 
 ```sh
-npm run bench          # both passes, writes benchmark/results/latest.json
-npm run bench:report   # regenerates this file's tables and docs/BENCHMARKS.md
+pnpm run bench          # both passes, writes benchmark/results/latest.json
+pnpm run bench:report   # regenerates this file's tables and docs/BENCHMARKS.md
 ```
 
 The second measures nothing, which is the point: a measurement takes tens of minutes and the wording
@@ -318,9 +318,9 @@ The unit tests need nothing; the live and differential ones need a PostgreSQL at
 `PGDATABASE` override.
 
 ```sh
-npm test            # unit, live and differential tests
-npm run citest      # the same, with coverage
-npm run typecheck   # tsc --noEmit
+pnpm test           # unit, live and differential tests
+pnpm run citest     # the same, with coverage
+pnpm run typecheck  # tsc --noEmit
 
 rman build          # check, lint, clean, compile, stamp - the whole pipeline
 rman lint           # eslint over the repository
@@ -328,12 +328,12 @@ rman check          # circular dependency check
 rman format         # prettier
 
 scripts/run-typeorm-suite.sh   # TypeORM's own suite, on a database of its own
-npm run bench                  # the benchmarks, then `npm run bench:report`
+pnpm run bench                 # the benchmarks, then `pnpm run bench:report`
 ```
 
-`lint`, `check`, `format` and the build are commands `@panates/rman-preset` contributes rather than
-scripts in `package.json`, so the flags behind them are pinned once for every repository that
-extends it. `.rmanrc.yml` is one line; `rman config --from-root` prints what it resolves to.
+The build is a command `@panates/rman-preset` contributes rather than a script in `package.json`,
+so the flags behind it are pinned once for every repository that extends it. `lint`, `check` and
+`format` are scripts, but each is one line delegating to the rman command of the same name. `.rmanrc.yml` is one line; `rman config --from-root` prints what it resolves to.
 
 The tests come in three kinds, and the split is deliberate:
 

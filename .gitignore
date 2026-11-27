@@ -48,3 +48,9 @@ graphify-out
 /test-*
 /reports
 npm-debug.log*
+
+# graphify installs these per clone; only pre-commit is shared
+/.husky/post-checkout
+/.husky/post-commit
+/.husky/post-merge
+/.husky/post-rewrite
