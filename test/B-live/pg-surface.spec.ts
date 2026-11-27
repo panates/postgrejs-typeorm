@@ -7,7 +7,7 @@ import { facadePool, liveConfig } from '../_support/live.js';
 /**
  * The members of `pg`'s surface that nothing else here reaches.
  *
- * `doc/DRIVER-DESIGN.md` §2 counts eighteen, and calls that count the
+ * `docs/DRIVER-DESIGN.md` §2 counts eighteen, and calls that count the
  * specification. Several of them had no test of their own until this file:
  * the callback form of `query()` (which TypeORM uses for the extension
  * installer), the standalone `Client` (which is knex's entry point rather

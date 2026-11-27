@@ -3,7 +3,7 @@
 Running [TypeORM](https://typeorm.io) on [PostgreJS](https://github.com/panates/postgrejs)'s
 wire-protocol client instead of `pg`.
 
-**Read `doc/DRIVER-DESIGN.md` before changing `src/`.** It is why the facade is shaped the way it
+**Read `docs/DRIVER-DESIGN.md` before changing `src/`.** It is why the facade is shaped the way it
 is - which of `pg`'s behaviour is load-bearing, which of PostgreJS's defaults had to be overridden
 and what each override costs - with the measurement behind every claim. Most of what looks arbitrary
 in `src/` is answered there, and D1-D5 at its end record what was chosen and what it would cost to
@@ -26,7 +26,7 @@ So the seam is not "implement TypeORM's interface" but "be the `pg` module". **C
 TypeORM `Driver` class cannot be registered at all - `DriverFactory.create()` is a closed `switch`
 over 18 `type` strings and `DataSource`'s constructor calls it unconditionally. The deliverable is a
 **`pg`-compatible facade over PostgreJS**, and TypeORM is its first consumer rather than its purpose.
-The surface is 18 members, all public; `doc/DRIVER-DESIGN.md` §2 is the checklist.
+The surface is 18 members, all public; `docs/DRIVER-DESIGN.md` §2 is the checklist.
 
 That changes the value of the work, which is the reason to do TypeORM at all rather than Prisma. The
 recon round counted each library's slice instead of assuming it, and **the leverage is real for knex
@@ -131,7 +131,7 @@ the only remaining advantage. Do not reopen that without new evidence.
   with identical results. Note TypeORM reset its versioning - 1.x follows 0.3.x - so the major bump
   carried no seam change. Before 0.2.39 there is no `driver` option at all, which is the floor.
 - **The Kysely dialect**: `../postgrejs-kysely` - finished.
-- **The Drizzle driver**: `../postgrejs-drizzle` - finished, and its `doc/DRIVER-DESIGN.md` plus
+- **The Drizzle driver**: `../postgrejs-drizzle` - finished, and its `docs/DRIVER-DESIGN.md` plus
   `CLAUDE.md` are the cheapest way to avoid paying twice for the same discoveries. Read both before
   starting. Copy the reasoning, not the layout - and not the constants: those are dialects, this is a
   facade, and the `fetchAsString` list does not carry over (see below).
@@ -199,7 +199,7 @@ Tests come in three kinds and the split is the point:
 
 `benchmark/` is the performance harness and is four files on purpose - `scenarios.mjs` is imported
 by both the timing pass and the memory workers, so the two cannot describe different work;
-`render-report.mjs` runs nothing, so `doc/BENCHMARKS.md` can be rewritten without re-measuring;
+`render-report.mjs` runs nothing, so `docs/BENCHMARKS.md` can be rewritten without re-measuring;
 `heap-worker.mjs` is one child process per client, because a baseline taken with both alive has
 their pools under it rather than in it. It is plain `.mjs` against `build/` for the same reason -
 a TypeScript loader inside the baseline window gives the number away. `benchmark/results/latest.json`
@@ -208,7 +208,7 @@ is committed and is what the document is generated from.
 Two things about it are easy to get wrong and are written up where they live: there is **no shape
 where neither client wins**, so the control row is read on magnitude against the read rows rather
 than on the sign test, and the control does not control for *allocation* at all, because a fixed
-per-call cost has no term that scales with server time. `.claude/latency-is-half-the-benchmark.md`
+per-call cost has no term that scales with server time. `.claude/local/latency-is-half-the-benchmark.md`
 is the handoff this was built from and is worth reading before changing any of it.
 
 `scripts/run-typeorm-suite.sh` runs TypeORM's own functional suite against the facade. Read its
@@ -238,7 +238,7 @@ re-checked in the TypeORM round wherever its expectations differ - the entries b
   **PostgreJS sends most of them unspecified itself now** - a string, a `Date`, an array - so the
   facade hands those over and binds only what PostgreJS would otherwise type. Nothing is rendered:
   since `a11a9af` an undeclared parameter is written the way `pg` writes one, measured byte for
-  byte. A number is the one value left declared, deliberately. `doc/DRIVER-DESIGN.md` §5 is the
+  byte. A number is the one value left declared, deliberately. `docs/DRIVER-DESIGN.md` §5 is the
   whole of it, and the history - `prepareValue(v)` then OID 0 for everything scored 28/28 against
   23/28 and was the policy until 2026-10-06 - is §5.6.
 - **`rowsAffected` is a number**, set for INSERT/UPDATE/DELETE/MERGE. `QueryResult` also carries
@@ -251,7 +251,7 @@ re-checked in the TypeORM round wherever its expectations differ - the entries b
   The in-flight query rejects with the same object. `pg` does neither: it rejects the query with the
   server's own `57P01` and raises nothing on the pool.
 - **Two PostgreJS defects this package found, both silently corrupting data, both since fixed
-  upstream.** Written up in `doc/DRIVER-DESIGN.md` §5.8, and kept there because they are why the
+  upstream.** Written up in `docs/DRIVER-DESIGN.md` §5.8, and kept there because they are why the
   parameter policy was what it was for most of this package's history:
   - a `Date` did not round-trip through a `timestamptz` column - the instant shifted by the local
     offset, invisible whenever the session's `TimeZone` and the process's zone agreed, not merely at
@@ -271,7 +271,7 @@ PostgreJS registers **125 built-in types** and decodes them into what they are: 
 `Range`, `Numeric`, a class per geometric type, `inet`/`macaddr`/`bit`/`tsvector` as the strings the
 server prints. The worry was that a `pg` facade would have to throw all of that away.
 
-**It does not.** Measured over 64 scalar and array types (`doc/DRIVER-DESIGN.md` §6): `pg` itself
+**It does not.** Measured over 64 scalar and array types (`docs/DRIVER-DESIGN.md` §6): `pg` itself
 parses `date`, `timestamp`, `timestamptz`, `json`, `jsonb`, `bool`, `bytea`, the integer and float
 families and every array of those - and PostgreJS already returns the identical value for all of
 them. `unknownTypesAsString: true` on its own gets 43 of the 64.
@@ -297,7 +297,7 @@ list asks for strings where TypeORM wants the `Date` PostgreJS already gives. It
 divergence rather than remove one.
 
 Whether the facade is `pg`-faithful by default, PostgreJS-faithful by default, or configurable is
-still **the** design decision - it is **D1** in `doc/DRIVER-DESIGN.md`, now with the cost of each
+still **the** design decision - it is **D1** in `docs/DRIVER-DESIGN.md`, now with the cost of each
 option priced, and it is yours to make.
 
 ## Release and tooling - rman 2.x
@@ -312,14 +312,21 @@ Single-package, so **`group`, `version.cascade` and `changelog.groupBy` are all 
 unset** - there is nothing to group and nothing to cascade to, and setting them would change
 nothing.
 
-What the preset owns, and what must therefore **not** come back as an npm script: `build` (its
-`before` is `rman check`, `rman lint`, `rman clean`; its `exec` is `tsc -b`; its `after` copies
-README/LICENSE, writes the build manifest and stamps the version), `lint`, `check`, `format`,
-`clean`. A leftover `build` script would silently win over the config's `exec` and keep this
-repository on its old pipeline with the config looking correct; a leftover `prebuild` would run the
-same three steps twice. `rman build` names each step as it runs, and each has to appear once.
+What the preset owns: `build` (its `before` is `rman check`, `rman lint`, `rman clean`; its `exec`
+is `tsc -b`; its `after` copies README/LICENSE, writes the build manifest and stamps the version),
+`lint`, `check`, `format`, `clean`. **`build` and `prebuild` must not come back as npm scripts** - a
+`build` script would silently win over the config's `exec` and keep this repository on its old
+pipeline with the config looking correct, and a `prebuild` would run the same three steps twice.
+`rman build` names each step as it runs, and each has to appear once.
 
-`scripts/run-typeorm-suite.sh` calls `npx rman build`. It called `npm run build` until that script
+**`lint`, `check` and `format` are a different case, and this was measured rather than assumed**:
+with `"lint": "exit 7"` in `package.json`, `rman lint` still ran eslint and still passed, so the
+rman command does not defer to a script of the same name. The repository standard asks for those
+three as scripts, so they are there, each one line delegating to the rman command - `rman lint`,
+`rman check`, `rman format`. They are a spelling for people who type `pnpm run`, not a second
+pipeline. `build` was never tested this way and does not need to be: nothing asks for it.
+
+`scripts/run-typeorm-suite.sh` calls `rman build`. It called `npm run build` until that script
 was deleted in the same commit - the sibling that missed this exited before its first test for
 weeks, because nothing ran it. Ours runs weekly on a cron, which is why it would have been caught,
 but the fix belongs with the cause.
@@ -339,6 +346,10 @@ Inherited from `../postgrejs`; they apply from the first commit.
   client's behaviour gets defined by whichever adapter last worked around it. A workaround is
   allowed only when the user is asked for one and says yes; it then carries a comment naming the
   task file it waits on, so it can be removed when the fix lands.
+- **Session notes live in `.claude/local/`, which git ignores; `.claude/local/handoff.md` is the
+  handoff note between sessions.** `.claude/settings.json` is the shared one and is committed. The
+  whole of `.claude/` used to be ignored, so a note added there was invisible and a path naming one
+  was dead for everybody else - which is the trap `postgrejs` hit first.
 - **Do not sign commits or pull requests on the assistant's behalf** - no `Co-Authored-By: Claude`
   trailer, no "Generated with Claude Code" line.
 - Run `git status` before staging. Commit only the files the change is about.

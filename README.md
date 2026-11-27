@@ -3,6 +3,7 @@
 [![NPM Version][npm-image]][npm-url]
 [![NPM Downloads][downloads-image]][downloads-url]
 [![CI Tests][ci-test-image]][ci-test-url]
+[![Test Coverage][coveralls-image]][coveralls-url]
 
 A `pg`-compatible facade over [PostgreJS](https://github.com/panates/postgrejs) for
 [TypeORM](https://typeorm.io). Put it where `pg` goes and everything above it stays the same - your
@@ -15,7 +16,7 @@ It is faster where it counts and holds far less memory doing it. A 4 MB `bytea` 
 hex text, twice the size, off the JS heap where a heap figure alone cannot see it. A
 100 000-element `int4[]` runs 3.89x, at 2.2 MB against 23.8 MB. Ordinary queries gain less and gain it
 repeatably: a point read is the faster of the two in 391 of 401 alternated pairs. All of it
-measured through TypeORM against `pg` on the same server: [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md).
+measured through TypeORM against `pg` on the same server: [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
 <!-- /bench:intro -->
 
@@ -27,7 +28,7 @@ And the client underneath can do things TypeORM has no way to ask for.
 npm install typeorm-postgrejs postgrejs
 ```
 
-`postgrejs` (>=3.10.0 <4) is a peer dependency; `typeorm` (>=0.3.0 <2) is an optional one, because
+`postgrejs` (>=3.13.0 <4) is a peer dependency; `typeorm` (>=0.3.0 <2) is an optional one, because
 this package never imports TypeORM. Node >=22. There are no runtime dependencies.
 
 ## Quick start
@@ -140,7 +141,7 @@ same migrations. What you get for it:
 | bytea of 4 MB - 1 row holding 4 MB | 35.207 ms<br>51.6 MB/call | **15.337 ms**<br>**4.1 MB/call** | **2.30x**<br>**-92%** |
 | int4[] of 100k - 1 row holding 1 array of 100 000 values | 22.929 ms<br>23.8 MB/call | **5.891 ms**<br>**2.2 MB/call** | **3.89x**<br>**-91%** |
 
-TypeORM 1.1.1, `pg` 8.23.1, PostgreJS 3.13.0, PostgreSQL 18.6, loopback, Node 24.15.0. Medians per call, and allocation per call. How that was measured and how far each row can be trusted are in [How the numbers were measured](#how-the-numbers-were-measured); the full set is in [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md).
+TypeORM 1.1.1, `pg` 8.23.1, PostgreJS 3.13.0, PostgreSQL 18.6, loopback, Node 24.15.0. Medians per call, and allocation per call. How that was measured and how far each row can be trusted are in [How the numbers were measured](#how-the-numbers-were-measured); the full set is in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
 <!-- /bench:headline -->
 
@@ -212,12 +213,12 @@ doing that job either. The sign test is the guard instead, and it is the per-row
 same check.
 
 ```sh
-npm run bench          # both passes, writes benchmark/results/latest.json
-npm run bench:report   # regenerates this file's tables and doc/BENCHMARKS.md
+pnpm run bench          # both passes, writes benchmark/results/latest.json
+pnpm run bench:report   # regenerates this file's tables and docs/BENCHMARKS.md
 ```
 
 The second measures nothing, which is the point: a measurement takes tens of minutes and the wording
-gets rewritten a dozen times. [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md) has every scenario, what each
+gets rewritten a dozen times. [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) has every scenario, what each
 client holds between calls, which mechanism earns which row, and why a per-call peak is not among
 them.
 
@@ -317,9 +318,9 @@ The unit tests need nothing; the live and differential ones need a PostgreSQL at
 `PGDATABASE` override.
 
 ```sh
-npm test            # unit, live and differential tests
-npm run citest      # the same, with coverage
-npm run typecheck   # tsc --noEmit
+pnpm test           # unit, live and differential tests
+pnpm run citest     # the same, with coverage
+pnpm run typecheck  # tsc --noEmit
 
 rman build          # check, lint, clean, compile, stamp - the whole pipeline
 rman lint           # eslint over the repository
@@ -327,12 +328,12 @@ rman check          # circular dependency check
 rman format         # prettier
 
 scripts/run-typeorm-suite.sh   # TypeORM's own suite, on a database of its own
-npm run bench                  # the benchmarks, then `npm run bench:report`
+pnpm run bench                 # the benchmarks, then `pnpm run bench:report`
 ```
 
-`lint`, `check`, `format` and the build are commands `@panates/rman-preset` contributes rather than
-scripts in `package.json`, so the flags behind them are pinned once for every repository that
-extends it. `.rmanrc.yml` is one line; `rman config --from-root` prints what it resolves to.
+The build is a command `@panates/rman-preset` contributes rather than a script in `package.json`,
+so the flags behind it are pinned once for every repository that extends it. `lint`, `check` and
+`format` are scripts, but each is one line delegating to the rman command of the same name. `.rmanrc.yml` is one line; `rman config --from-root` prints what it resolves to.
 
 The tests come in three kinds, and the split is deliberate:
 
@@ -344,7 +345,7 @@ The tests come in three kinds, and the split is deliberate:
 - `test/C-differential` - the same TypeORM programs through this facade and through `pg`,
   deep-compared. It is what catches a difference nobody thought to assert.
 
-[`doc/DRIVER-DESIGN.md`](doc/DRIVER-DESIGN.md) is why the facade is shaped the way it is, with the
+[`docs/DRIVER-DESIGN.md`](docs/DRIVER-DESIGN.md) is why the facade is shaped the way it is, with the
 measurement behind every claim.
 
 ## License
@@ -357,3 +358,5 @@ BSD-3-Clause
 [downloads-url]: https://npmjs.org/package/typeorm-postgrejs
 [ci-test-image]: https://github.com/panates/postgrejs-typeorm/actions/workflows/test.yml/badge.svg
 [ci-test-url]: https://github.com/panates/postgrejs-typeorm/actions/workflows/test.yml
+[coveralls-image]: https://img.shields.io/coveralls/panates/postgrejs-typeorm/main.svg
+[coveralls-url]: https://coveralls.io/r/panates/postgrejs-typeorm

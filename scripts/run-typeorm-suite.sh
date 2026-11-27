@@ -211,13 +211,15 @@ fi
 
 say "Building this facade"
 # `rman build`, not `npm run build`: the build script moved into
-# @panates/rman-preset and this repository no longer has one. The same line
+# @panates/rman-preset and this repository no longer has one. Plain `rman`,
+# not `npx rman`: rman is not a devDependency, and npx answered from its own
+# cache with a different version than the one on the PATH. The same line
 # in ../postgrejs-drizzle went on calling `npm run build` after its own
 # migration and the suite exited before its first test with "Missing script",
 # which nothing noticed because nothing ran it on a schedule. This one runs
 # weekly, so it would have been found - but the fix belongs in the same commit
 # as the cause.
-(cd "$REPO_DIR" && npx rman build >/dev/null) || die "build failed"
+(cd "$REPO_DIR" && rman build >/dev/null) || die "build failed"
 
 # The facade is loaded from where it was built, not copied into the
 # checkout's node_modules. It imports nothing from TypeORM - it is a `pg`
