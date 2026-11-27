@@ -1,5 +1,5 @@
 /**
- * Reads `results/latest.json` and writes `doc/BENCHMARKS.md`. It runs
+ * Reads `results/latest.json` and writes `docs/BENCHMARKS.md`. It runs
  * nothing.
  *
  * That separation is the point: a measurement takes tens of minutes and
@@ -357,7 +357,7 @@ shortly after they stop; one figure cannot say both, so both are here.
 ${heldRows}
 `;
 
-const out = join(HERE, '..', 'doc', 'BENCHMARKS.md');
+const out = join(HERE, '..', 'docs', 'BENCHMARKS.md');
 writeFileSync(out, doc);
 process.stderr.write(`wrote ${out}\n`);
 
@@ -407,7 +407,7 @@ const pgjs =
     ? `${r.versions.postgrejs}+unreleased`
     : r.versions.postgrejs;
 
-const env = `TypeORM ${r.versions.typeorm}, \`pg\` ${r.versions.pg}, PostgreJS ${pgjs}, PostgreSQL ${r.versions.postgresql}, loopback, Node ${r.node.replace('v', '')}. Medians per call, and allocation per call. How that was measured and how far each row can be trusted are in [How the numbers were measured](#how-the-numbers-were-measured); the full set is in [\`doc/BENCHMARKS.md\`](doc/BENCHMARKS.md).`;
+const env = `TypeORM ${r.versions.typeorm}, \`pg\` ${r.versions.pg}, PostgreJS ${pgjs}, PostgreSQL ${r.versions.postgresql}, loopback, Node ${r.node.replace('v', '')}. Medians per call, and allocation per call. How that was measured and how far each row can be trusted are in [How the numbers were measured](#how-the-numbers-were-measured); the full set is in [\`docs/BENCHMARKS.md\`](docs/BENCHMARKS.md).`;
 
 const big = payloads[0];
 const bytea = rows.find(s => s.name === 'bytea of 4 MB');
@@ -431,7 +431,7 @@ ${ms(bytea.msDriver)} against ${ms(bytea.msControl)}, and at ${kb(bytea.memory[r
 hex text, twice the size, off the JS heap where a heap figure alone cannot see it. A
 100 000-element \`int4[]\` runs ${speedup(arr.ratio)}, at ${kb(arr.memory[r.driver].allocPerCallKb)} against ${kb(arr.memory[r.control].allocPerCallKb)}. Ordinary queries gain less and gain it
 repeatably: a point read is the faster of the two in ${point.sign.wins} of ${point.sign.pairs} alternated pairs. All of it
-measured through TypeORM against \`pg\` on the same server: [\`doc/BENCHMARKS.md\`](doc/BENCHMARKS.md).`,
+measured through TypeORM against \`pg\` on the same server: [\`docs/BENCHMARKS.md\`](docs/BENCHMARKS.md).`,
 );
 readme = replaceRegion(
   readme,

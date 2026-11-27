@@ -26,15 +26,16 @@ const RANGE_OIDS: number[] = [
  * PostgreJS decodes them into something else.
  *
  * Derived by measurement over 64 scalar and array types, not by reading the
- * catalog - see `doc/DRIVER-DESIGN.md` §6. Two things about the list are
+ * catalog - see `docs/DRIVER-DESIGN.md` §6. Two things about the list are
  * easy to get wrong:
  *
  * - `interval` is **not** here either, though `pg`'s value for it is an
  *   object and PostgreJS's is an `Interval`. Asking for text would hand back
  *   a bare string, which is further from `pg` than the class is - the class
- *   carries the same seven fields under the same names. What is left between
- *   them is `toJSON` and `pg`'s sparseness, and that is a question for the
- *   decoder: `../postgrejs/.claude/pg-compatible-decoding.md`.
+ *   carries the same seven fields under the same names. What used to part
+ *   them - the class's `toJSON` returning the literal, and an interval
+ *   reporting its zero fields - was closed in the client, so the two now
+ *   serialise alike (`a0ab8bf`).
  * - `date`, `timestamp`, `timestamptz` and their array forms are **not**
  *   here. `pg` parses those into `Date` objects and PostgreJS returns the
  *   identical `Date`; asking for text would create a divergence rather than

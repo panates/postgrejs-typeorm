@@ -51,7 +51,7 @@ export interface PgjsFacadeOptions {
    * been called; it is no longer only about inferring.
    *
    * Off by default, and it is not the same thing as being faster: see
-   * `params.ts` for what it changes and `doc/DRIVER-DESIGN.md` §5 for the
+   * `params.ts` for what it changes and `docs/DRIVER-DESIGN.md` §5 for the
    * measurement behind the default.
    */
   inferParameterTypes?: boolean;

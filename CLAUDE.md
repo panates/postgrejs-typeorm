@@ -3,7 +3,7 @@
 Running [TypeORM](https://typeorm.io) on [PostgreJS](https://github.com/panates/postgrejs)'s
 wire-protocol client instead of `pg`.
 
-**Read `doc/DRIVER-DESIGN.md` before changing `src/`.** It is why the facade is shaped the way it
+**Read `docs/DRIVER-DESIGN.md` before changing `src/`.** It is why the facade is shaped the way it
 is - which of `pg`'s behaviour is load-bearing, which of PostgreJS's defaults had to be overridden
 and what each override costs - with the measurement behind every claim. Most of what looks arbitrary
 in `src/` is answered there, and D1-D5 at its end record what was chosen and what it would cost to
@@ -11,127 +11,52 @@ choose otherwise.
 
 ## It is not a TypeORM driver - it is a `pg` facade
 
-TypeORM does not take a dialect the way Kysely and Drizzle do. Its PostgreSQL options carry this,
-read from `typeorm@1.1.1`'s own `driver/postgres/PostgresDataSourceOptions.d.ts:17-20`:
+TypeORM's PostgreSQL options carry a `driver?: any` that "defaults to `require("pg")`", so the seam
+is not "implement TypeORM's interface" but **be the `pg` module**. A custom TypeORM `Driver` class
+cannot be registered at all. The surface is 18 members, all public; `docs/DRIVER-DESIGN.md` §2 is
+the checklist.
 
-```ts
-/**
- * The driver object
- * This defaults to `require("pg")`.
- */
-readonly driver?: any;
-```
+Two things follow, and neither is to be reopened without new evidence:
 
-So the seam is not "implement TypeORM's interface" but "be the `pg` module". **Confirmed**: a custom
-TypeORM `Driver` class cannot be registered at all - `DriverFactory.create()` is a closed `switch`
-over 18 `type` strings and `DataSource`'s constructor calls it unconditionally. The deliverable is a
-**`pg`-compatible facade over PostgreJS**, and TypeORM is its first consumer rather than its purpose.
-The surface is 18 members, all public; `doc/DRIVER-DESIGN.md` §2 is the checklist.
+- **This package ships as `typeorm-postgrejs`, and knex gets its own repository with its own copy
+  of `src/`.** Not "extract a shared core". What keeps the duplication safe is the test design, so
+  port that with the code: **`pg` is the live oracle in `test/B-live`**, not a table of expected
+  values.
+- **Prisma was rejected on evidence**, not taste. Do not argue the package's value on pg-promise
+  or Sequelize either - the facade cannot reach them.
 
-That changes the value of the work, which is the reason to do TypeORM at all rather than Prisma. The
-recon round counted each library's slice instead of assuming it, and **the leverage is real for knex
-and not real for pg-promise or Sequelize**:
-
-| target | weekly downloads (2026-09-20) | how the facade gets in | reachable? |
-| --- | --- | --- | --- |
-| `pg` | 38.5M | what the facade replaces | - |
-| typeorm | 3.6M | `driver?: any`, straight into `PostgresDriver.loadDependencies()` | **yes** - 18 public members |
-| knex | 3.8M | **not** `client?: string \| typeof Client` - that injects a knex *dialect class*. The `pg` module is hard-wired in `Client_PG._driver()` (`lib/dialects/postgres/index.js:63-65`), so you subclass it and override `_driver()` | **yes**, with work - it wants `driver.Client` (which TypeORM never touches), query-config objects and `pg-query-stream` |
-| sequelize | 2.0M | v6 wants `lib.types.getTypeParser` / `setTypeParser` / `types.arrayParser.create` (`lib/dialects/postgres/connection-manager.js:23`, `:53`, `:68`) | **no** - a parser-function registry, which PostgreJS has no equivalent of because it decodes at the wire level. v7 is still `7.0.0-alpha.48` |
-| pg-promise | 0.50M | monkey-patches `pg.Client.prototype.connect` and reaches `this.connection.on('parameterStatus', …)` inside it (`lib/main.js:185-186`) | **no** - that is pg's private protocol object |
-| objection | 0.17M | through knex | follows knex |
-
-So the pitch is **"a `pg` facade that TypeORM and knex can both use"**, not "replace `pg`
-everywhere". TypeORM alone still justifies it - but do not make the argument on pg-promise or
-Sequelize.
-
-**This package ships as `typeorm-postgrejs`, and knex gets its own repository with its own copy of
-`src/`.** Settled, with the cost accepted rather than overlooked: the two copies can drift. Do not
-reopen it as "extract a shared core" - a name people search for is worth more than a deduplicated
-tree, and a knex user reading `typeorm-postgrejs` in their lockfile is the same loss of confidence
-moved somewhere it cannot be explained away.
-
-What makes the duplication survivable is already here and has to be copied with the code: **`pg` is
-the live oracle in `test/B-live`, not a table of expected values.** Two copies held to the same
-third party cannot silently disagree with each other without one of them first disagreeing with
-`pg` - so neither repository ever needs to compare itself to the other. Port the test design, not
-just `src/`.
-
-The two consumers overlap less than the shared code suggests, which is why the copy is thin work
-rather than a second project. Measured against `knex@3.3.0` and `typeorm@1.1.1`: TypeORM enters
-through `new postgres.Pool(...)` and never constructs a `Client`; knex enters through
-`new driver.Client(...)`, pools with `tarn`, and never touches `pg`'s `Pool`. knex also cannot be
-handed the module - `require('pg')` is hard-wired in `Client_PG._driver()`
-(`lib/dialects/postgres/index.js:63-65`) - so the knex side is a subclass overriding that one
-method, plus the callback and query-config call forms it uses throughout. Everything underneath is
-the same facade.
-
-Prisma was the other candidate and was rejected on evidence, not taste: its adapters must return
-`SqlResultSet { columnTypes: ColumnType[], columnNames, rows }`, where `ColumnType` is Prisma's own
-~30-value enum and the doc comment says the values are *"used within the Query Engine to convert
-values from JS to Quaint values"* (`@prisma/driver-adapter-utils@7.10.0`). Every typed value
-PostgreJS produces would be flattened for the Rust engine to re-convert, leaving socket throughput as
-the only remaining advantage. Do not reopen that without new evidence.
+Why the seam is this one, what each target was worth, and why knex is a copy rather than a shared
+core: [docs/decisions/pg-facade-not-a-driver.md](docs/decisions/pg-facade-not-a-driver.md).
 
 ## Where things are
 
 - **PostgreJS**: `../postgrejs`. Its `CLAUDE.md` describes the internals. Peer is
-  **`>=3.13.0 <4`**, and that floor is exact rather than cautious. **3.13.0** is where the
-  parameter policy's two requirements landed, both found here:
+  **`>=3.13.0 <4`**, and that floor is exact rather than cautious - `341f343` and `a11a9af` are
+  what `src/` needs from it.
 
-  | what `src/` needs | upstream |
-  | --- | --- |
-  | a non-integer scalar declared `numeric`, not `float8` - without it `$1::money` with `12.34` is `42846` | `341f343` |
-  | an undeclared parameter written the way `pg` writes one - without it a plain object bound at OID 0 is `[object Object]` | `a11a9af` |
+  **Build against the copy in `node_modules`, not against a release.** Do not add a branch, a
+  fallback or a feature test for a published version, and do not run `git tag --contains` to
+  justify keeping one.
 
-  Verified by behaviour rather than by version number before the floor was moved.
+  **The facade carries no post-decode fixups and nothing of `pg`'s.** No table that rewrites
+  values after decoding, no `postgres-interval`, no `postgres-array`. A divergence from `pg` is
+  measured against the `node_modules` build and then **fixed in PostgreJS** - written up in
+  `../postgrejs/.claude/local/` - rather than patched around here.
 
-  The floor was `>=3.10.0` until 2026-10-06, for six things that landed in 3.10.0 and that `src/`
-  still uses - kept here because the table is the history of what this package has needed:
+  **Re-run the type matrix after every upstream bump**, not only the TypeORM suite. `money` is the
+  worked example: a new decoder upstream is a new *divergence* here, and the suite is silent about
+  it.
 
-  | what `src/` needs | upstream |
-  | --- | --- |
-  | `fetchAsString` naming an array column by its element type | `313c71e` |
-  | `fetchAsString`'s `{ oid, arrays: false }`, which is how `numeric` is asked for without `numeric[]` | `423977d` |
-  | the value classes serialising as their fields, not as the literal | `ac5ba39` |
-  | `toPostgres()` on them, so a value read can be written back | `3d84fb5` |
-  | `Circle` naming its radius `radius` | `8d30acc` |
-  | a lost connection reported on `'error'`, not only `'close'` | `93b07c3` |
+  What the floor is made of, the six-entry history behind the old `>=3.10.0`, and why there is no
+  compatibility code left: [docs/decisions/postgrejs-peer-floor.md](docs/decisions/postgrejs-peer-floor.md).
 
-  Every one of those was found by this package's own tests and written up in `../postgrejs/.claude/`
-  rather than worked around here, which is why there is no compatibility code to delete.
-
-  **Build against the copy in `node_modules`, not against a release.** The table above is for
-  reading history, not for deciding what `src/` carries: PostgreJS is maintained in the next
-  directory and released before this package ships, so an unreleased fix is a scheduling detail.
-  Do not add a branch, a fallback or a feature test for a published version, and do not run
-  `git tag --contains` to justify keeping one.
-
-  **The facade carries no post-decode fixups and nothing of `pg`'s.** No table that rewrites values
-  after decoding, no `postgres-interval`, no `postgres-array`. When a divergence from `pg` turns
-  up, it is measured against the `node_modules` build and then **fixed in PostgreJS** - written up
-  in `../postgrejs/.claude/` - rather than patched around here. The knowledge of what `pg` answers
-  belongs in the client that decodes, once, not reconstructed afterwards by every adapter.
-  That round is done: `value-shapes.ts` and both dependencies are gone, and the divergences that
-  justified them were closed upstream instead (`313c71e`, `3d84fb5`, `8d30acc`, `ac5ba39`).
-
-  Re-run the type matrix after every upstream bump, not only the TypeORM suite. **`money` is the
-  worked example**: a new decoder upstream is a new *divergence* here, because the facade's job is
-  to answer what `pg` answers - and `pg` has no parser for `money` at all. The suite is silent
-  about it; the matrix failed on the first run.
-
-  The caret-stripping fallback that used to be in `src/errors.ts` is gone for the same reason -
-  `serverMessage` is in the build, so the regex was a branch for a version this package will never
-  be installed against. It was not replaced with anything: an error carrying a caret diagram but no
-  `serverMessage` did not come from this client, and guessing at its shape is what the field was
-  added to stop.
 - **TypeORM**: peer is **`>=0.3.0 <2`**. The lines that touch `pg` are unchanged from **0.2.39** -
   where `options.driver` was introduced, 2021-11-09 - to 1.1.1, apart from `defaults.parseInt8` added
   in the 0.3 line and `||` becoming `??` at 1.0.0. The same facade was run against 0.3.31 and 1.1.1
   with identical results. Note TypeORM reset its versioning - 1.x follows 0.3.x - so the major bump
   carried no seam change. Before 0.2.39 there is no `driver` option at all, which is the floor.
 - **The Kysely dialect**: `../postgrejs-kysely` - finished.
-- **The Drizzle driver**: `../postgrejs-drizzle` - finished, and its `doc/DRIVER-DESIGN.md` plus
+- **The Drizzle driver**: `../postgrejs-drizzle` - finished, and its `docs/DRIVER-DESIGN.md` plus
   `CLAUDE.md` are the cheapest way to avoid paying twice for the same discoveries. Read both before
   starting. Copy the reasoning, not the layout - and not the constants: those are dialects, this is a
   facade, and the `fetchAsString` list does not carry over (see below).
@@ -199,7 +124,7 @@ Tests come in three kinds and the split is the point:
 
 `benchmark/` is the performance harness and is four files on purpose - `scenarios.mjs` is imported
 by both the timing pass and the memory workers, so the two cannot describe different work;
-`render-report.mjs` runs nothing, so `doc/BENCHMARKS.md` can be rewritten without re-measuring;
+`render-report.mjs` runs nothing, so `docs/BENCHMARKS.md` can be rewritten without re-measuring;
 `heap-worker.mjs` is one child process per client, because a baseline taken with both alive has
 their pools under it rather than in it. It is plain `.mjs` against `build/` for the same reason -
 a TypeScript loader inside the baseline window gives the number away. `benchmark/results/latest.json`
@@ -208,7 +133,7 @@ is committed and is what the document is generated from.
 Two things about it are easy to get wrong and are written up where they live: there is **no shape
 where neither client wins**, so the control row is read on magnitude against the read rows rather
 than on the sign test, and the control does not control for *allocation* at all, because a fixed
-per-call cost has no term that scales with server time. `.claude/latency-is-half-the-benchmark.md`
+per-call cost has no term that scales with server time. `.claude/local/latency-is-half-the-benchmark.md`
 is the handoff this was built from and is worth reading before changing any of it.
 
 `scripts/run-typeorm-suite.sh` runs TypeORM's own functional suite against the facade. Read its
@@ -238,7 +163,7 @@ re-checked in the TypeORM round wherever its expectations differ - the entries b
   **PostgreJS sends most of them unspecified itself now** - a string, a `Date`, an array - so the
   facade hands those over and binds only what PostgreJS would otherwise type. Nothing is rendered:
   since `a11a9af` an undeclared parameter is written the way `pg` writes one, measured byte for
-  byte. A number is the one value left declared, deliberately. `doc/DRIVER-DESIGN.md` §5 is the
+  byte. A number is the one value left declared, deliberately. `docs/DRIVER-DESIGN.md` §5 is the
   whole of it, and the history - `prepareValue(v)` then OID 0 for everything scored 28/28 against
   23/28 and was the policy until 2026-10-06 - is §5.6.
 - **`rowsAffected` is a number**, set for INSERT/UPDATE/DELETE/MERGE. `QueryResult` also carries
@@ -251,7 +176,7 @@ re-checked in the TypeORM round wherever its expectations differ - the entries b
   The in-flight query rejects with the same object. `pg` does neither: it rejects the query with the
   server's own `57P01` and raises nothing on the pool.
 - **Two PostgreJS defects this package found, both silently corrupting data, both since fixed
-  upstream.** Written up in `doc/DRIVER-DESIGN.md` §5.8, and kept there because they are why the
+  upstream.** Written up in `docs/DRIVER-DESIGN.md` §5.8, and kept there because they are why the
   parameter policy was what it was for most of this package's history:
   - a `Date` did not round-trip through a `timestamptz` column - the instant shifted by the local
     offset, invisible whenever the session's `TimeZone` and the process's zone agreed, not merely at
@@ -267,62 +192,36 @@ re-checked in the TypeORM round wherever its expectations differ - the entries b
 
 ## The decoding tension - measured, and narrower than it looked
 
-PostgreJS registers **125 built-in types** and decodes them into what they are: `Interval`,
-`Range`, `Numeric`, a class per geometric type, `inet`/`macaddr`/`bit`/`tsvector` as the strings the
-server prints. The worry was that a `pg` facade would have to throw all of that away.
+The worry was that a `pg` facade would throw away everything PostgreJS decodes. It does not: over
+64 scalar and array types the two agree on all but a short list, which `fetchAsString` accounts
+for. That is 64/64 on values, with `interval`, `point` and `circle` coming back as classes that are
+a superset of `pg`'s plain objects - not a fixup, and not to be converted.
 
-**It does not.** Measured over 64 scalar and array types (`doc/DRIVER-DESIGN.md` §6): `pg` itself
-parses `date`, `timestamp`, `timestamptz`, `json`, `jsonb`, `bool`, `bytea`, the integer and float
-families and every array of those - and PostgreJS already returns the identical value for all of
-them. `unknownTypesAsString: true` on its own gets 43 of the 64.
+- **`numeric` and `int8` are the two divergences people notice.** `pg` returns a string for both;
+  PostgreJS returns a `number`, a `Numeric` or a `BigInt`. TypeORM hands a `numeric` straight to
+  the user, so keeping PostgreJS's decoding there destroys precision.
+- **Do not copy `postgrejs-drizzle`'s `fetchAsString` list.** Those are dialects, this is a facade;
+  its list would create a divergence rather than remove one.
+- Whether the facade is `pg`-faithful by default, PostgreJS-faithful by default, or configurable is
+  **D1** in `docs/DRIVER-DESIGN.md`, and it is yours to make.
 
-What actually has to be suppressed is a short list - the types where `pg`'s own value is a string and
-PostgreJS's is not: `int8`, `numeric`, `time`, `interval`, the geometric family and the range family,
-through `fetchAsString`. Plus four types no wire option can reach, where `pg` produces a plain object
-or an array of strings and PostgreJS a class instance: `point`, `circle`, `interval` and `int8[]`,
-handled by a post-decode fixup. That is 64/64.
-
-The two divergences this section has always called certain are confirmed, and they are the two
-people notice:
-
-- `numeric` - `pg` returns a string always, `19.99` included. PostgreJS returns a `number`, or a
-  `Numeric` when a double cannot carry the value. Keeping PostgreJS's decoding here
-  destroys precision and TypeORM hands the result straight to the user - a `numeric` column has no
-  hydration branch.
-- `int8` - `pg` returns a string. PostgreJS returns a `number`, or a `BigInt` past 2^53.
-
-**Do not copy `postgrejs-drizzle`'s `fetchAsString` list.** Drizzle's own `node-postgres` driver
-overrides `pg`'s parsers for TIMESTAMP, TIMESTAMPTZ, DATE and INTERVAL to get raw strings, so that
-list asks for strings where TypeORM wants the `Date` PostgreJS already gives. It would create a
-divergence rather than remove one.
-
-Whether the facade is `pg`-faithful by default, PostgreJS-faithful by default, or configurable is
-still **the** design decision - it is **D1** in `doc/DRIVER-DESIGN.md`, now with the cost of each
-option priced, and it is yours to make.
+What was measured, and why each of those falls where it does:
+[docs/decisions/decoding-divergences.md](docs/decisions/decoding-divergences.md).
 
 ## Release and tooling - rman 2.x
 
-`.rmanrc.yml` is one line, `extends: '@panates/rman-preset'`, and that is deliberate: **the ground
-truth is `rman config --from-root`, never the preset's source.** Reading the preset here would have
-been wrong - 1.6.0 carries neither `group: false` nor `changelog.unreleased` nor
-`version.changelog`, because rman 2.7 absorbed all three as its own defaults, and the resolved
-config shows them.
+`.rmanrc.yml` extends `@panates/rman-preset`, and **the ground truth is `rman config --from-root`,
+never the preset's source.** Single-package, so `group`, `version.cascade` and `changelog.groupBy`
+are deliberately unset.
 
-Single-package, so **`group`, `version.cascade` and `changelog.groupBy` are all deliberately
-unset** - there is nothing to group and nothing to cascade to, and setting them would change
-nothing.
+- **`build` and `prebuild` must not come back as npm scripts.** A `build` script silently wins over
+  the config's `exec`; a `prebuild` runs the same three steps twice.
+- **`lint`, `check` and `format` are scripts**, each one line delegating to the rman command of the
+  same name. Measured: an rman command does not defer to a script that shares its name.
+- `scripts/run-typeorm-suite.sh` calls `rman build` - plain `rman`, not `npx rman`.
 
-What the preset owns, and what must therefore **not** come back as an npm script: `build` (its
-`before` is `rman check`, `rman lint`, `rman clean`; its `exec` is `tsc -b`; its `after` copies
-README/LICENSE, writes the build manifest and stamps the version), `lint`, `check`, `format`,
-`clean`. A leftover `build` script would silently win over the config's `exec` and keep this
-repository on its old pipeline with the config looking correct; a leftover `prebuild` would run the
-same three steps twice. `rman build` names each step as it runs, and each has to appear once.
-
-`scripts/run-typeorm-suite.sh` calls `npx rman build`. It called `npm run build` until that script
-was deleted in the same commit - the sibling that missed this exited before its first test for
-weeks, because nothing ran it. Ours runs weekly on a cron, which is why it would have been caught,
-but the fix belongs with the cause.
+The measurement, and what the preset owns:
+[docs/decisions/rman-pipeline-and-scripts.md](docs/decisions/rman-pipeline-and-scripts.md).
 
 ## Working conventions
 
@@ -332,13 +231,17 @@ Inherited from `../postgrejs`; they apply from the first commit.
   adapter needs is missing, wrong or slower in `postgrejs`, do not patch around it in this package:
   no post-decode value rewriting, no shim, no vendored parser, no `pg`-compatibility table, no
   monkey-patching of the client, no "temporary" branch written to suit the behaviour as it is
-  today. Stop there and write the finding up as a task file in `../postgrejs/.claude/<short-name>.md`
+  today. Stop there and write the finding up as a task file in `../postgrejs/.claude/local/<short-name>.md`
   - what was asked of the client, what it answered, what it should answer, and the smallest
   reproduction that shows the difference. That repo's own session picks it up and fixes it at the
   source. Otherwise every adapter ends up carrying its own copy of the same correction, and the
   client's behaviour gets defined by whichever adapter last worked around it. A workaround is
   allowed only when the user is asked for one and says yes; it then carries a comment naming the
   task file it waits on, so it can be removed when the fix lands.
+- **Session notes live in `.claude/local/`, which git ignores; `.claude/local/handoff.md` is the
+  handoff note between sessions.** `.claude/settings.json` is the shared one and is committed. The
+  whole of `.claude/` used to be ignored, so a note added there was invisible and a path naming one
+  was dead for everybody else - which is the trap `postgrejs` hit first.
 - **Do not sign commits or pull requests on the assistant's behalf** - no `Co-Authored-By: Claude`
   trailer, no "Generated with Claude Code" line.
 - Run `git status` before staging. Commit only the files the change is about.

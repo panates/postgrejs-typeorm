@@ -19,8 +19,7 @@ import { facadePool } from '../_support/live.js';
  * through a contrived option: `postgrejs: { prepare: false }` is what a
  * PgBouncer user is told to set, and it asks for the whole row as text. That
  * is why it is worth a test - the corruption was one supported configuration
- * away, not behind a flag nobody sets. Fixed upstream in `4c1154b`; the
- * write-up that prompted it is `../postgrejs/.claude/text-timestamp-fallback.md`.
+ * away, not behind a flag nobody sets. Fixed upstream in `4c1154b`.
  */
 const STYLES = [
   'ISO, MDY',

@@ -29,8 +29,7 @@
  * - *It is global.* Patching a prototype reaches every `DataSource` in the
  *   process, including one running on `pg`. Benign for the reason above.
  *
- * **It must be removed when TypeORM fixes it** - see
- * `doc/TYPEORM-BOOLEAN.md` for the report. Set
+ * **It must be removed when TypeORM fixes it.** Set
  * `TYPEORM_POSTGREJS_NO_BOOLEAN_PATCH=1` to skip it.
  *
  * Idempotent, and silent if TypeORM is not installed: this package is a `pg`

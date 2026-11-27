@@ -4,6 +4,7 @@
   "version": "2.0.2",
   "author": "Panates",
   "license": "BSD-3-Clause",
+  "packageManager": "pnpm@12.10.1",
   "private": true,
   "peerDependencies": {
     "postgrejs": ">=3.13.0 <4",
@@ -34,7 +35,6 @@
     "postgrejs": "^3.15.1",
     "prettier": "^3.9.10",
     "reflect-metadata": "^0.2.2",
-    "rman": "^2.42.1",
     "typeorm": "^1.1.2",
     "typescript": "^6.0.3"
   },
@@ -46,7 +46,10 @@
     "bench": "node --expose-gc benchmark/bench.mjs",
     "bench:report": "node benchmark/render-report.mjs",
     "prepare": "husky || true",
-    "prepublishOnly": "echo 'Publish from the build directory - run rman publish, which generates that manifest itself.' && exit 1"
+    "prepublishOnly": "echo 'Publish from the build directory - run rman publish, which generates that manifest itself.' && exit 1",
+    "lint": "rman lint",
+    "check": "rman check",
+    "format": "rman format"
   },
   "type": "module",
   "module": "./index.js",

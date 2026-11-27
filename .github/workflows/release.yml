@@ -45,7 +45,29 @@ jobs:
           needs.source.outputs.head-ref != 'dev'
         )
       )
+    # A reusable workflow's permissions are governed by the calling job. test.yml only reads
+    # the repository, and says so itself; this is the same statement where it is enforced.
+    permissions:
+      contents: read
     uses: ./.github/workflows/test.yml
+
+  # Sends the released code's coverage to Coveralls under main: the report dev's test run left
+  # for the merged commit, or the one this run's own test job produced. It only warns when it
+  # finds no report, so a release never fails on coverage.
+  coverage:
+    needs: [source, test]
+    if: >
+      always() && !cancelled() &&
+      needs.source.result == 'success' &&
+      (needs.test.result == 'success' ||
+       (needs.test.result == 'skipped' && needs.source.outputs.head-ref == 'dev'))
+    uses: panates/github-actions/.github/workflows/coverage-publish.yaml@v3
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    with:
+      pr-number: ${{ needs.source.outputs.head-ref == 'dev' && needs.source.outputs.pr-number || '' }}
 
   release:
     needs: [source, test]
