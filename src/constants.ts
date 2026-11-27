@@ -34,7 +34,7 @@ const RANGE_OIDS: number[] = [
  *   a bare string, which is further from `pg` than the class is - the class
  *   carries the same seven fields under the same names. What is left between
  *   them is `toJSON` and `pg`'s sparseness, and that is a question for the
- *   decoder: `../postgrejs/.claude/pg-compatible-decoding.md`.
+ *   decoder.
  * - `date`, `timestamp`, `timestamptz` and their array forms are **not**
  *   here. `pg` parses those into `Date` objects and PostgreJS returns the
  *   identical `Date`; asking for text would create a divergence rather than

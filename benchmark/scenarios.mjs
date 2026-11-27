@@ -653,7 +653,7 @@ export const SCENARIOS = [
      * result, which is what the two clients actually do differently.
      *
      * The per-statement cost is real and is tracked upstream
-     * (`../postgrejs/.claude/a-fixed-cost-per-statement.md`); it is not
+     * (`../postgrejs/.claude/local/a-fixed-cost-per-statement.md`); it is not
      * something a benchmark row should stand in for.
      */
     name: 'insert one row',

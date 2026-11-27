@@ -65,7 +65,7 @@ function toPgFields(fields: readonly FieldInfo[]): PgField[] {
  * Nothing is rewritten here. This reshapes the result object and hands the
  * values through exactly as PostgreJS decoded them: whatever `pg` answers
  * that PostgreJS does not is a question for the decoder, and is fixed there.
- * `../postgrejs/.claude/pg-compatible-decoding.md` is what is still open.
+ * What is still open is tracked upstream rather than here.
  */
 export function toPgResult<R = any>(r: QueryResult): PgResult<R> {
   const fields = r.fields ?? [];
