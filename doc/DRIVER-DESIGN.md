@@ -948,8 +948,8 @@ runs** - otherwise it would double every write in a multi-statement INSERT. Veri
 reasoned: two INSERTs, the call fails, the table is still empty; after the retry it has two rows, not
 four. `test/B-live/statement-kinds.spec.ts` pins it.
 
-Two of the four are PostgreJS's rather than the facade's, and are filed upstream in
-`../postgrejs/.claude/query-edge-cases.md`: the empty statement, and `determine()` typing an array
+Two of the four are PostgreJS's rather than the facade's, and were filed upstream: the empty
+statement, and `determine()` typing an array
 from `value[0]` alone - so `['a', null]` can be sent and `[null, 'a']` cannot, which makes it depend
 on element order.
 
