@@ -208,7 +208,7 @@ is committed and is what the document is generated from.
 Two things about it are easy to get wrong and are written up where they live: there is **no shape
 where neither client wins**, so the control row is read on magnitude against the read rows rather
 than on the sign test, and the control does not control for *allocation* at all, because a fixed
-per-call cost has no term that scales with server time. `.claude/latency-is-half-the-benchmark.md`
+per-call cost has no term that scales with server time. `.claude/local/latency-is-half-the-benchmark.md`
 is the handoff this was built from and is worth reading before changing any of it.
 
 `scripts/run-typeorm-suite.sh` runs TypeORM's own functional suite against the facade. Read its
@@ -339,6 +339,10 @@ Inherited from `../postgrejs`; they apply from the first commit.
   client's behaviour gets defined by whichever adapter last worked around it. A workaround is
   allowed only when the user is asked for one and says yes; it then carries a comment naming the
   task file it waits on, so it can be removed when the fix lands.
+- **Session notes live in `.claude/local/`, which git ignores; `.claude/local/handoff.md` is the
+  handoff note between sessions.** `.claude/settings.json` is the shared one and is committed. The
+  whole of `.claude/` used to be ignored, so a note added there was invisible and a path naming one
+  was dead for everybody else - which is the trap `postgrejs` hit first.
 - **Do not sign commits or pull requests on the assistant's behalf** - no `Co-Authored-By: Claude`
   trailer, no "Generated with Claude Code" line.
 - Run `git status` before staging. Commit only the files the change is about.
