@@ -45,6 +45,10 @@ jobs:
           needs.source.outputs.head-ref != 'dev'
         )
       )
+    # A reusable workflow's permissions are governed by the calling job. test.yml only reads
+    # the repository, and says so itself; this is the same statement where it is enforced.
+    permissions:
+      contents: read
     uses: ./.github/workflows/test.yml
 
   release:
