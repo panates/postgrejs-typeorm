@@ -1,6 +1,30 @@
 # Changelog
 
-<!-- rman:documented-up-to efe326c1a48b978d5207c4ae9d352821624aa0d6 -->
+<!-- rman:documented-up-to 35ce1b385af1e2a3284a601597bd3947e28febc8 -->
+
+## v2.0.3 (2026-11-27)
+
+### 📚 Documentation
+
+- point at the postgrejs notes where they now live (e46174e)
+- stop calling the decoding divergences open (ff5c38a)
+- move doc/ to docs/, add the coverage badge, correct the peer floor (eb28cc0)
+- move the long rationales out of CLAUDE.md into docs/decisions (523ebf9)
+
+### 🧹 Chores
+
+- sync lockfile [skip ci] (c0ee1cf)
+- stop ignoring the whole of .claude/, keep the notes in .claude/local/ (7fa7639)
+- bring the shared config files back to the templates (e2c78b6)
+- add the security policy, code of conduct and issue templates (3b89fc9)
+- publish coverage from the release and pin main's source branch (0ba1738)
+- install, lock and publish with pnpm (d1712ad)
+
+### 💬 General Changes
+
+- Merge branch 'dev' into chore/standards (e9efb0d)
+
+---
 
 ## v2.0.2 (2026-11-15)
 
