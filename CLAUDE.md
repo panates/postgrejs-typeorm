@@ -98,7 +98,7 @@ the only remaining advantage. Do not reopen that without new evidence.
   | `Circle` naming its radius `radius` | `8d30acc` |
   | a lost connection reported on `'error'`, not only `'close'` | `93b07c3` |
 
-  Every one of those was found by this package's own tests and written up in `../postgrejs/.claude/`
+  Every one of those was found by this package's own tests and written up in `../postgrejs/.claude/local/`
   rather than worked around here, which is why there is no compatibility code to delete.
 
   **Build against the copy in `node_modules`, not against a release.** The table above is for
@@ -110,7 +110,7 @@ the only remaining advantage. Do not reopen that without new evidence.
   **The facade carries no post-decode fixups and nothing of `pg`'s.** No table that rewrites values
   after decoding, no `postgres-interval`, no `postgres-array`. When a divergence from `pg` turns
   up, it is measured against the `node_modules` build and then **fixed in PostgreJS** - written up
-  in `../postgrejs/.claude/` - rather than patched around here. The knowledge of what `pg` answers
+  in `../postgrejs/.claude/local/` - rather than patched around here. The knowledge of what `pg` answers
   belongs in the client that decodes, once, not reconstructed afterwards by every adapter.
   That round is done: `value-shapes.ts` and both dependencies are gone, and the divergences that
   justified them were closed upstream instead (`313c71e`, `3d84fb5`, `8d30acc`, `ac5ba39`).
@@ -339,7 +339,7 @@ Inherited from `../postgrejs`; they apply from the first commit.
   adapter needs is missing, wrong or slower in `postgrejs`, do not patch around it in this package:
   no post-decode value rewriting, no shim, no vendored parser, no `pg`-compatibility table, no
   monkey-patching of the client, no "temporary" branch written to suit the behaviour as it is
-  today. Stop there and write the finding up as a task file in `../postgrejs/.claude/<short-name>.md`
+  today. Stop there and write the finding up as a task file in `../postgrejs/.claude/local/<short-name>.md`
   - what was asked of the client, what it answered, what it should answer, and the smallest
   reproduction that shows the difference. That repo's own session picks it up and fixes it at the
   source. Otherwise every adapter ends up carrying its own copy of the same correction, and the

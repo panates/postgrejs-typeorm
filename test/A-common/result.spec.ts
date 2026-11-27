@@ -104,7 +104,6 @@ describe('toPgResult', () => {
     // that used to be rewritten here - a `point` - now arrives untouched,
     // class and all. Whatever `pg` answers that PostgreJS does not is fixed
     // in the decoder, not undone afterwards. See
-    // `../postgrejs/.claude/pg-compatible-decoding.md`, and
     // `test/B-live/types.spec.ts` for which types are still open.
     class Point {
       constructor(
