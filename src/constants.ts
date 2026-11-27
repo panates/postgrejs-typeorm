@@ -26,7 +26,7 @@ const RANGE_OIDS: number[] = [
  * PostgreJS decodes them into something else.
  *
  * Derived by measurement over 64 scalar and array types, not by reading the
- * catalog - see `doc/DRIVER-DESIGN.md` §6. Two things about the list are
+ * catalog - see `docs/DRIVER-DESIGN.md` §6. Two things about the list are
  * easy to get wrong:
  *
  * - `interval` is **not** here either, though `pg`'s value for it is an

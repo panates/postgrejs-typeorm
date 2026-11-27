@@ -32,7 +32,7 @@ jobs:
         node: ['22', '24']
         postgres: ['16', '18']
         # Both ends of the peer range, >=0.3.0 <2. The `pg` seam is unchanged
-        # across it - see doc/DRIVER-DESIGN.md §11 - so this matrix exists to
+        # across it - see docs/DRIVER-DESIGN.md §11 - so this matrix exists to
         # keep that true rather than because a difference is expected.
         typeorm: ['0.3.31', '1.1.1']
     runs-on: ubuntu-24.04
